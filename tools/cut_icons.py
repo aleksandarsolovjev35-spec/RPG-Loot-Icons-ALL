@@ -30,8 +30,10 @@ B. Frameless sheets (packs 39/40): icons sit on bare black, there is nothing
         gutter, which would merge two columns/rows.  The gutters that ARE
         found fix the pitch, so the grid line is predicted by least squares
         (pitch + origin) and inserted where a span is ~2x the pitch;
-     4. cells with (almost) no content are dropped; the rest are cropped
-        as-is, no inset, no repainting (there is no frame to remove).
+     4. cells with (almost) no content are dropped; the crop is 1px inside the
+        box (the outermost line is the plate's anti-aliasing seam over the
+        black gutter - as a crop border it shows up as a black line that
+        interrupts the gradient), no repainting (there is no frame to remove).
 
 Sizes are not normalised - a crop is what the cell is (~148x148 on framed
 packs, ~152x152 on frameless ones).
@@ -313,9 +315,13 @@ def process_sheet(path, out_dir, montage_path=None, stats=None):
         mode, inset = 'frame', 2               # cut inside the frame line
     else:
         rects, info = find_cells_borderless(content)
-        mode, inset = 'grid', 0                # nothing to trim off
         if not rects:
             return [], []                      # no gutters -> no trustworthy grid
+        # the outermost column/row of a box is the plate's anti-aliased edge
+        # (its luminance is ~0.4x of the neighbour's: partial coverage over
+        # the black gutter).  Kept as the border of the crop it reads as a
+        # 1px black line that breaks the plate's gradient, so cut 1px inside.
+        mode, inset = 'grid', 1
 
     if stats is not None:
         stats.update(mode=mode, rows=len({q[1] for q in rects}),
