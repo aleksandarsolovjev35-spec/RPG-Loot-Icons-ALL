@@ -62,7 +62,68 @@ FRAME_COLS = 4
 FRAME_COL_PX = 300
 
 
-def find_rectangles(hs, vs):
+# A single tile can be shifted relative to the sheet's grid: in the source
+# layouts a few plates were moved by hand when the sheet was assembled.  The
+# lattice then hands out a box whose sides miss the real frame lines by 5-16 px,
+# the coverage test below fails and the icon silently disappears (4 sheets out
+# of 82: 04/part1, 13/part2, 14/part2, 34/part2).  Such a box is re-located
+# locally: every side is snapped to the strongest gray line within
+# REFINE_SEARCH px, so the crop follows the shifted tile instead of the grid.
+REFINE_SEARCH = 26     # px to look up/down and left/right of an expected line
+REFINE_GRAY = 0.35     # a line is visible when this fraction of the side is gray
+REFINE_COVER = 0.70    # ...or when the artwork hides it underneath
+REFINE_SIZE_TOL = 12   # refined box must stay as large as the modal cell
+
+
+def refine_rect(rect, gray, content, mode_w, mode_h, search=REFINE_SEARCH):
+    """Snap a rejected lattice cell onto the local frame lines.
+
+    Returns the refined (xL, yT, xR, yB), or None when the neighbourhood does
+    not hold a plausible frame box.  A side counts when it is visibly gray, or
+    when the icon is drawn over it - a frame line can be completely hidden by
+    the artwork it frames (measured on 34/part2: bottom line, 12% visible).
+    """
+    H, W = gray.shape
+    xL, yT, xR, yB = rect
+
+    def best_v(x, y0, y1):
+        lo, hi = max(0, x - search), min(W, x + search + 1)
+        prof = gray[y0:y1 + 1, lo:hi].mean(0)
+        k = int(np.argmax(prof))
+        return lo + k, float(prof[k])
+
+    def best_h(y, x0, x1):
+        lo, hi = max(0, y - search), min(H, y + search + 1)
+        prof = gray[lo:hi, x0:x1 + 1].mean(1)
+        k = int(np.argmax(prof))
+        return lo + k, float(prof[k])
+
+    nL, sL = best_v(xL, yT, yB)
+    nR, sR = best_v(xR, yT, yB)
+    nT, sT = best_h(yT, xL, xR)
+    nB, sB = best_h(yB, xL, xR)
+    if nR - nL < 60 or nB - nT < 60:
+        return None
+    if mode_w is not None and abs((nR - nL + 1) - mode_w) > REFINE_SIZE_TOL:
+        return None
+    if mode_h is not None and abs((nB - nT + 1) - mode_h) > REFINE_SIZE_TOL:
+        return None
+    sides = ((sL, content[nT:nB + 1, nL].mean()),
+             (sR, content[nT:nB + 1, nR].mean()),
+             (sT, content[nT, nL:nR + 1].mean()),
+             (sB, content[nB, nL:nR + 1].mean()))
+    if not all(g >= REFINE_GRAY or c >= REFINE_COVER for g, c in sides):
+        return None
+    return (nL, nT, nR, nB)
+
+
+def find_rectangles(hs, vs, gray=None, content=None):
+    """Cell rectangles of a framed sheet.
+
+    `gray` (thin gray mask) and `content` (artwork mask) are optional; when
+    both are passed, lattice cells rejected by the coverage test get one chance
+    to snap onto a locally shifted tile (see refine_rect).
+    """
     hlines = cluster([m['y0'] for m in hs if m['x1'] - m['x0'] >= 80])
     hlines = [y for y in hlines
               if sum(1 for m in hs if abs(m['y0'] - y) <= 2 and m['x1'] - m['x0'] >= 60) >= 3]
@@ -98,6 +159,7 @@ def find_rectangles(hs, vs):
         return 90 <= h <= 220 and 90 <= w <= 220
 
     rects = []
+    rejected = []
     for i in range(len(hlines) - 1):
         for j in range(len(vlines) - 1):
             yT, yB = hlines[i], hlines[i + 1]
@@ -112,6 +174,14 @@ def find_rectangles(hs, vs):
             # 3+ partially visible sides, or 2 fully visible sides, or one full side
             if sum(c >= 0.3 for c in covs) >= 3 or sum(c >= 0.8 for c in covs) >= 2 or max(covs) >= 0.9:
                 rects.append((xL, yT, xR, yB))
+            else:
+                rejected.append((xL, yT, xR, yB))
+
+    if gray is not None and content is not None:
+        for rect in rejected:
+            refined = refine_rect(rect, gray, content, mode_w, mode_h)
+            if refined is not None and refined not in rects:
+                rects.append(refined)
     return rects, hlines, vlines
 
 
@@ -293,9 +363,14 @@ def save_icon(rgb, path):
     q.save(path, compress_level=9)
 
 
-def process_sheet(path, out_dir, montage_path=None, stats=None):
-    """Cut one sheet. Returns (saved icons, cell rectangles); `stats` (dict)
-    receives diagnostics: mode, rows, cols, cell size, pitch."""
+def prepare_cells(path, stats=None):
+    """Read one sheet and work out how to cut it.
+
+    Returns (image, ordered rects, remove-mask, mode, inset); `stats`, when
+    given, receives diagnostics (mode, rows, cols, cell size, pitch).
+    Returns None when the sheet is not readable at all (framed sheet whose
+    frames cannot be traced, or frameless sheet without a trustworthy grid).
+    """
     im = np.array(Image.open(path).convert('RGB')).astype(np.uint8)
     H, W, _ = im.shape
     r = im[:, :, 0].astype(int)
@@ -309,14 +384,15 @@ def process_sheet(path, out_dir, montage_path=None, stats=None):
     framed = has_frame(gray)
     info = {}
     if framed:
-        rects, _hl, _vl = find_rectangles(h_segments(gray, 30), v_segments(gray, 30))
+        rects, _hl, _vl = find_rectangles(h_segments(gray, 30), v_segments(gray, 30),
+                                           gray=gray, content=content)
         if not rects:
-            return [], []                      # framed sheet, frames unreadable
-        mode, inset = 'frame', 2               # cut inside the frame line
+            return None                          # framed sheet, frames unreadable
+        mode, inset = 'frame', 2                 # cut inside the frame line
     else:
         rects, info = find_cells_borderless(content)
         if not rects:
-            return [], []                      # no gutters -> no trustworthy grid
+            return None                          # no gutters -> no trustworthy grid
         # the outermost column/row of a box is the plate's anti-aliased edge
         # (its luminance is ~0.4x of the neighbour's: partial coverage over
         # the black gutter).  Kept as the border of the crop it reads as a
@@ -340,27 +416,49 @@ def process_sheet(path, out_dir, montage_path=None, stats=None):
             remove |= classify_band(content, thin, gray2, rect)
     else:
         remove = np.zeros((H, W), bool)
-    rects = order_reading(rects)
 
-    os.makedirs(out_dir, exist_ok=True)
-    saved = []
+    return im, order_reading(rects), remove, mode, inset
+
+
+def iter_cell_crops(path, stats=None):
+    """Yield (index, (x0, y0), crop) for one sheet, exactly as process_sheet
+    cuts them: opaque RGB arrays, frame pixels painted black, numbering in
+    reading order starting at 1."""
+    prepared = prepare_cells(path, stats)
+    if prepared is None:
+        return
+    im, rects, remove, _mode, inset = prepared
     for k, (xL, yT, xR, yB) in enumerate(rects, 1):
         x0, x1 = xL + inset, xR - inset
         y0, y1 = yT + inset, yB - inset
         crop = im[y0:y1 + 1, x0:x1 + 1].copy()
         crop[remove[y0:y1 + 1, x0:x1 + 1]] = (0, 0, 0)
+        yield k, (x0, y0), crop
+
+
+def process_sheet(path, out_dir, montage_path=None, stats=None):
+    """Cut one sheet. Returns (saved icons, cell rectangles); `stats` (dict)
+    receives diagnostics: mode, rows, cols, cell size, pitch."""
+    crops = list(iter_cell_crops(path, stats))
+    if not crops:
+        return [], []
+
+    os.makedirs(out_dir, exist_ok=True)
+    saved = []
+    for k, xy, crop in crops:
         name = 'icon_%03d.png' % k
         save_icon(crop, os.path.join(out_dir, name))
-        saved.append((name, (x0, y0)))
+        saved.append((name, xy))
 
     if montage_path:
+        H, W, _ = np.array(Image.open(path).convert('RGB')).shape
         mon = np.zeros((H, W, 3), np.uint8)
         for name, (x0, y0) in saved:
             a = np.array(Image.open(os.path.join(out_dir, name)).convert('RGB'))
             h, w = a.shape[:2]
             mon[y0:y0 + h, x0:x0 + w] = a
         Image.fromarray(mon).save(montage_path)
-    return saved, rects
+    return saved, [xy for _k, xy, _c in crops]
 
 
 if __name__ == '__main__':
