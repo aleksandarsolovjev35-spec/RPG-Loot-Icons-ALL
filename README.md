@@ -69,6 +69,51 @@
 
 Размеры иконок не выравниваются — берётся ровно содержимое ячейки.
 
+## Перепаковка в полноцветный WebP (`tools/repack_icons.py`)
+
+`cut_icons.py` сохраняет палитровые PNG на 255 цветов — это теряет градиенты
+(медиана уникальных цветов в исходном кропе 9339) и оставляет «плавающий»
+размер (21 вариант, 146–153 px, 40 % не квадратные). `repack_icons.py` режет
+листы **тем же детектором** (`cut_icons.iter_cell_crops` — нумерация и
+геометрия ячеек совпадают с `cut_icons/`) и сохраняет кропы полноцветно:
+
+```
+кроп (полный цвет) -> resize в --size (Lanczos) -> энкод -> icons-<size>/<пак>/partN/icon_NNN.webp
+                                                          + icons-<size>/manifest.json
+```
+
+Замеры (40 иконок, ошибка после приведения к 64 px, т.е. как видно в VTT):
+
+| вариант | КБ/иконку | весь набор | ошибка 512 | ошибка при 64 px |
+|---|---|---|---|---|
+| палитра 255 PNG (`cut_icons/`) | 14.5 | 58 МБ | 1.43 | — (ступеньки видны) |
+| **WebP q90 512 px (по умолчанию)** | 22 | **84 МБ** | 1.20 | 0.51 |
+| WebP q80 512 | 12.7 | 51 МБ | — | — |
+| AVIF q70 512 | 13.6 | 54 МБ | 1.20 | 0.61 |
+| WebP lossless 512 | 145 | 580 МБ | 0 | 0 |
+| палитра 256 PNG 512 | 91 | 366 МБ | — | — |
+
+Lossless для 512 px нереален по объёму, поэтому по умолчанию q90: визуально
+неотличим от исходника на игровом размере. Апскейл — чистый Lanczos без
+шарпинга (unsharp даёт видимые гало на этом арте, проверено).
+
+```bash
+.venv/bin/python tools/repack_icons.py                        # 512 px, WebP q90
+.venv/bin/python tools/repack_icons.py --size 256 --quality 92
+.venv/bin/python tools/repack_icons.py --format avif --quality 70
+.venv/bin/python tools/repack_icons.py --size 0               # размер кропа как есть
+.venv/bin/python tools/repack_icons.py --dry-run              # прикидка объёма, ничего не пишет
+.venv/bin/python tools/repack_icons.py --only "Icons 39"      # один пак
+```
+
+`manifest.json` на выходе: по каждой иконке файл, пак, часть, номер, исходный
+лист, координаты ячейки, нативный размер, размер файла и md5, плюс параметры
+энкодинга — база для компендиума Foundry, имён и дедупликации.
+Ссылки в `manifest.json` относительны корню `icons-<size>/`.
+
+`cut_icons/` и `icons-*/` в git не хранятся (см. `.gitignore`) — это
+производные данные на 58 и 84 МБ, они пересобираются за пару минут.
+
 ## Запуск
 
 ```bash
@@ -76,7 +121,8 @@ python3 -m venv .venv
 .venv/bin/pip install -r tools/requirements.txt
 .venv/bin/python tools/cut_icons.py            # все листы
 .venv/bin/python tools/cut_icons.py "RPG Loot Icons 39/RPG Loot Icons 39 Part 1.jpg"
-.venv/bin/python tools/qa_icons.py             # проверка результата
+.venv/bin/python tools/qa_icons.py             # проверка палитрового набора
+.venv/bin/python tools/qa_icons.py icons-512 webp   # проверка перепакованного
 ```
 
 `cut_icons.py` печатает на лист: режим (`frame` / `grid`), размер найденной сетки,

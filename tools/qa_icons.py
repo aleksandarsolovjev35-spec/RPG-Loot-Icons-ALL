@@ -1,10 +1,11 @@
-"""QA over cut_icons/: sizes, blanks, duplicates.
+"""QA over an icon set: sizes, blanks, duplicates.
 
 Pure post-processing check (no detection re-run), so it is fast enough to run
 after every batch: ~2 s for 4096 icons.
 
-    python3 tools/qa_icons.py            # summary + problems only
-    python3 tools/qa_icons.py -v         # per-sheet table
+    python3 tools/qa_icons.py                       # cut_icons/ (*.png)
+    python3 tools/qa_icons.py icons-512 webp        # repacked set
+    python3 tools/qa_icons.py -v                    # per-sheet table
 
 Exit code 1 when something is reported.
 """
@@ -19,14 +20,14 @@ from PIL import Image
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def main(verbose=False):
-    packs = sorted(glob.glob(os.path.join(ROOT, 'cut_icons', '*')))
+def main(verbose=False, root='cut_icons', ext='png'):
+    packs = sorted(p for p in glob.glob(os.path.join(ROOT, root, '*')) if os.path.isdir(p))
     seen = {}
     problems = []
     total = 0
     for pack in packs:
         for part in sorted(glob.glob(os.path.join(pack, '*'))):
-            files = sorted(glob.glob(os.path.join(part, '*.png')))
+            files = sorted(glob.glob(os.path.join(part, '*.' + ext)))
             if not files:
                 problems.append('%s/%s: empty' % (os.path.basename(pack), os.path.basename(part)))
                 continue
@@ -44,7 +45,7 @@ def main(verbose=False):
                     problems.append('%s: blank' % os.path.relpath(f, ROOT))
                 elif a.shape[0] < 60 or a.shape[1] < 60:
                     problems.append('%s: tiny %dx%d' % (os.path.relpath(f, ROOT), a.shape[1], a.shape[0]))
-            (mw, mh), n = sizes.most_common(1)[0]
+            (mw, mh), _n = sizes.most_common(1)[0]
             odd = [s for s in sizes if abs(s[0] - mw) > 0.15 * mw or abs(s[1] - mh) > 0.15 * mh]
             if odd:
                 problems.append('%s/%s: size outliers %s (modal %dx%d)'
@@ -56,7 +57,7 @@ def main(verbose=False):
                          len(sizes),
                          max(s[0] for s in sizes) - min(s[0] for s in sizes),
                          max(s[1] for s in sizes) - min(s[1] for s in sizes)))
-    print('checked: %d icons in %d packs' % (total, len(packs)))
+    print('checked: %d icons in %d packs  (%s/*.%s)' % (total, len(packs), root, ext))
     if problems:
         print('problems (%d):' % len(problems))
         for p in problems[:60]:
@@ -67,4 +68,7 @@ def main(verbose=False):
 
 
 if __name__ == '__main__':
-    sys.exit(main('-v' in sys.argv or '--verbose' in sys.argv))
+    args = [a for a in sys.argv[1:] if not a.startswith('-')]
+    sys.exit(main('-v' in sys.argv or '--verbose' in sys.argv,
+                  args[0] if args else 'cut_icons',
+                  args[1] if len(args) > 1 else 'png'))

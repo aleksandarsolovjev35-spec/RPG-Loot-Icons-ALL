@@ -293,9 +293,14 @@ def save_icon(rgb, path):
     q.save(path, compress_level=9)
 
 
-def process_sheet(path, out_dir, montage_path=None, stats=None):
-    """Cut one sheet. Returns (saved icons, cell rectangles); `stats` (dict)
-    receives diagnostics: mode, rows, cols, cell size, pitch."""
+def prepare_cells(path, stats=None):
+    """Read one sheet and work out how to cut it.
+
+    Returns (image, ordered rects, remove-mask, mode, inset); `stats`, when
+    given, receives diagnostics (mode, rows, cols, cell size, pitch).
+    Returns None when the sheet is not readable at all (framed sheet whose
+    frames cannot be traced, or frameless sheet without a trustworthy grid).
+    """
     im = np.array(Image.open(path).convert('RGB')).astype(np.uint8)
     H, W, _ = im.shape
     r = im[:, :, 0].astype(int)
@@ -311,12 +316,12 @@ def process_sheet(path, out_dir, montage_path=None, stats=None):
     if framed:
         rects, _hl, _vl = find_rectangles(h_segments(gray, 30), v_segments(gray, 30))
         if not rects:
-            return [], []                      # framed sheet, frames unreadable
-        mode, inset = 'frame', 2               # cut inside the frame line
+            return None                          # framed sheet, frames unreadable
+        mode, inset = 'frame', 2                 # cut inside the frame line
     else:
         rects, info = find_cells_borderless(content)
         if not rects:
-            return [], []                      # no gutters -> no trustworthy grid
+            return None                          # no gutters -> no trustworthy grid
         # the outermost column/row of a box is the plate's anti-aliased edge
         # (its luminance is ~0.4x of the neighbour's: partial coverage over
         # the black gutter).  Kept as the border of the crop it reads as a
@@ -340,27 +345,49 @@ def process_sheet(path, out_dir, montage_path=None, stats=None):
             remove |= classify_band(content, thin, gray2, rect)
     else:
         remove = np.zeros((H, W), bool)
-    rects = order_reading(rects)
 
-    os.makedirs(out_dir, exist_ok=True)
-    saved = []
+    return im, order_reading(rects), remove, mode, inset
+
+
+def iter_cell_crops(path, stats=None):
+    """Yield (index, (x0, y0), crop) for one sheet, exactly as process_sheet
+    cuts them: opaque RGB arrays, frame pixels painted black, numbering in
+    reading order starting at 1."""
+    prepared = prepare_cells(path, stats)
+    if prepared is None:
+        return
+    im, rects, remove, _mode, inset = prepared
     for k, (xL, yT, xR, yB) in enumerate(rects, 1):
         x0, x1 = xL + inset, xR - inset
         y0, y1 = yT + inset, yB - inset
         crop = im[y0:y1 + 1, x0:x1 + 1].copy()
         crop[remove[y0:y1 + 1, x0:x1 + 1]] = (0, 0, 0)
+        yield k, (x0, y0), crop
+
+
+def process_sheet(path, out_dir, montage_path=None, stats=None):
+    """Cut one sheet. Returns (saved icons, cell rectangles); `stats` (dict)
+    receives diagnostics: mode, rows, cols, cell size, pitch."""
+    crops = list(iter_cell_crops(path, stats))
+    if not crops:
+        return [], []
+
+    os.makedirs(out_dir, exist_ok=True)
+    saved = []
+    for k, xy, crop in crops:
         name = 'icon_%03d.png' % k
         save_icon(crop, os.path.join(out_dir, name))
-        saved.append((name, (x0, y0)))
+        saved.append((name, xy))
 
     if montage_path:
+        H, W, _ = np.array(Image.open(path).convert('RGB')).shape
         mon = np.zeros((H, W, 3), np.uint8)
         for name, (x0, y0) in saved:
             a = np.array(Image.open(os.path.join(out_dir, name)).convert('RGB'))
             h, w = a.shape[:2]
             mon[y0:y0 + h, x0:x0 + w] = a
         Image.fromarray(mon).save(montage_path)
-    return saved, rects
+    return saved, [xy for _k, xy, _c in crops]
 
 
 if __name__ == '__main__':

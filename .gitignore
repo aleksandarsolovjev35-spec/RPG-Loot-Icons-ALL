@@ -1,3 +1,8 @@
 .cache/
 __pycache__/
 .venv/
+
+# Derived icon sets (rebuilt in minutes by tools/cut_icons.py + tools/repack_icons.py).
+# Kept out of git on purpose: cut_icons/ = 58 MB, icons-512/ = 84 MB.
+cut_icons/
+icons-*/
