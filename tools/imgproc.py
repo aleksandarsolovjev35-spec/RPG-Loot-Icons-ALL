@@ -320,6 +320,37 @@ def masked_unsharp(x, sigma=1.6, amount=0.30, thr=0.010, knee=0.04, clamp=0.05):
     return np.clip(x + np.clip(d * amount * w, -clamp, clamp), 0.0, 1.0)
 
 
+def keep_black(out, src, knee=0.04):
+    """Don't lift pixels that were black in `src` — kills silhouette halos."""
+    if not knee:
+        return out
+    w = (1.0 - soft(luma(src), 0.0, knee))[..., None]
+    return out * (1.0 - w) + src * w
+
+
+def laplacian_detail(x, amount=0.70, fine=0.06, coarse=0.22,
+                     s1=1.0, s2=2.6, s3=6.5):
+    """Multi-scale detail without razor contours.
+
+    The mid band (blur s1..s2) is remapped: small coefficients (texture, facets,
+    folds) get `amount` extra gain, large ones (the silhouette) stay near 1.
+    Fine/coarse bands get a light interior-only lift.  Empty black is pinned
+    to the pre-filter image so a glow cannot grow into the background.
+    """
+    if not amount:
+        return x
+    g1, g2, g3 = blur(x, s1), blur(x, s2), blur(x, s3)
+    fine_b, mid, coarse_b, base = x - g1, g1 - g2, g2 - g3, g3
+    mag = np.mean(np.abs(mid), axis=-1, keepdims=True)
+    gain = 1.0 + amount * (1.0 - soft(mag, 0.025, 0.10))
+    inter = soft(luma(x), 0.04, 0.12)[..., None]
+    y = (base
+         + coarse_b * (1.0 + coarse * inter)
+         + mid * (1.0 + (gain - 1.0) * inter)
+         + fine_b * (1.0 + fine * inter))
+    return keep_black(np.clip(y, 0.0, 1.0), x)
+
+
 # --------------------------------------------------------------------------
 # whole pipeline
 # --------------------------------------------------------------------------
@@ -327,7 +358,7 @@ DEFAULTS = dict(size=512, denoise=0.014, denoise_r=1, black=0.010,
                 kernel='lanczos3', clamp=True, stretch=False,
                 steer=3.0, steer_taps=5, steer_rho=2.0, steer_range=0.030,
                 sharpen=0.30, sharpen_sigma=1.6, sharpen_thr=0.010, sharpen_knee=0.04,
-                sharpen_clamp=0.05, post_denoise=0.0, native_u8=True)
+                sharpen_clamp=0.05, laplacian=0.0, post_denoise=0.0, native_u8=True)
 
 
 def enhance(crop_u8, cfg=None):
@@ -352,6 +383,10 @@ def enhance(crop_u8, cfg=None):
         u = masked_unsharp(u, sigma=c['sharpen_sigma'], amount=c['sharpen'],
                            thr=c['sharpen_thr'], knee=c['sharpen_knee'],
                            clamp=c['sharpen_clamp'])
+    if c['laplacian']:
+        sc = (c['size'] / 256.0) if c.get('size') else 1.0
+        u = laplacian_detail(u, amount=c['laplacian'],
+                             s1=1.0 * sc, s2=2.6 * sc, s3=6.5 * sc)
     if c['post_denoise']:
         u = denoise(u, eps=c['post_denoise'])
     return to_u8(u)
