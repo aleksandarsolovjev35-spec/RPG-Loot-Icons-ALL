@@ -241,9 +241,61 @@ enhance занимает на 6 % меньше, чем старый q90 без �
 
 * `cut_icons/` — 4100 палитровых PNG (58 МБ);
 * **`icons-256/`** — 4100 WebP 256×256 + `manifest.json` (~43 МБ), канон;
-* `icons-512/` — 4100 WebP 512×512 + `manifest.json` (79.5 МБ).
+* `icons-512/` — 4100 WebP 512×512 + `manifest.json` (79.5 МБ);
+* **`icons-256-quiet/`** — 4100 WebP 256×256, стиль `quiet+vign` (39.1 МБ, на 12.4 %
+  легче канона) + свой `manifest.json`; тот же грид, но без разноцветных подложек;
+* `icons-256-<стиль>/` — любой другой пресет из `tools/stylize.py` (вес 30–50 МБ);
+  если стилей станет больше одного, в git стоит оставить канон и один выбранный.
 
 256-набор собирается из листов ~7 минут (два процесса).
+
+## Стилизация: что ещё можно сделать с картинкой (`tools/stylize.py`)
+
+Всё, что выше, картинку **чистит** — убирает шум JPEG, звон ресемплера, лестницу
+148 px. Стилизация меняет **как** иконка выглядит. `tools/stylize.py` — «лаборатория
+стилей»: 13 пресетов на тех же примитивах (только numpy + Pillow), замеры и листы
+сравнения; можно выпечь выбранный стиль сразу по всем 4100 иконкам.
+
+```bash
+.venv/bin/python tools/stylize.py                     # листы + таблица замеров
+.venv/bin/python tools/stylize.py --presets grade,quiet+vign
+.venv/bin/python tools/stylize.py --apply quiet+vign --out-dir icons-256-quiet
+```
+
+| стиль | что делает | Δ от канона | КБ/иконку |
+|---|---|---|---|
+| `grade` | S-кривая + вибранс + сплит-тонирование | 10.2 | 10.5 (×1.07) |
+| `cel` | 5 плоских тонов (banded luma) + насыщенность | 5.6 | 10.6 (×1.07) |
+| `ink` | затемняет сами контуры, без светлой каймы | 12.8 | 9.9 (×1.01) |
+| `rim` | контровой свет: подсветка силуэта со стороны верхнего левого света | 5.2 | 10.3 (×1.04) |
+| `glow` | bloom только по ярким местам (зелья, самоцветы, магия) | 11.2 | 8.6 (×0.88) |
+| `paint` | Kuwahara: фасетки вместо шума | 11.8 | 9.9 (×1.01) |
+| `quiet` | гасит цветное свечение за предметом к одному тёмному тону | 5.5 | 8.9 (×0.90) |
+| `vign` | фиксированная виньетка по углам | 1.8 | 9.5 (×0.96) |
+| `warm` / `cold` | тёплый (факельный) / холодный (лунный) свет | 8.7 / 6.0 | 10.4 / 10.1 |
+| `palette` | все 4100 → k-means 48 цветов | 7.1 | 13.6 (×1.38) |
+| `pixel` | 64 px + 32 цвета, nearest ×4 (другая ветка арта) | 11.9 | 4.8 (×0.49) |
+| `loot` | `grade` + `quiet` + `rim` + `glow` — «премиальный пак» | 14.4 | 9.6 (×0.97) |
+
+Цепочки пишутся через `+`: `--presets quiet+vign`, `--apply grade+rim`. Цифры в
+таблице — вывод `tools/stylize.py` по умолчанию (8 иконок), вес — замер по 150.
+
+Главный вывод лаборатории: набор разъезжается не стилем рисунка, а **подложками** —
+у каждой иконки за предметом своё свечение/дым своей яркости (в кадре до +40
+уровней из 255), поэтому 4100 иконок в гриде лута выглядят как 4100 разных
+картинок. `quiet` (+`vign`) приводит подложки к одному тёмному тону, и это
+единственный пресет, который улучшает набор **и вес одновременно**: 44.7 → ~39.8 МБ
+на набор (плоский фон лучше жмётся). `palette`, наоборот, делает файлы на 38 %
+тяжелее — квантование плодит резкие границы, которые WebP дороже градиентов.
+
+Листы и полный разбор с метриками: `docs/style-lab/` (`grid-compare.png` —
+имитация сетки лута, `style-zoom.png` — 200 % без сглаживания,
+`style-sheet.png` — все пресеты на 8 иконках).
+
+Выпеченный набор: **`icons-256-quiet/`** (4100 WebP 256×256, q92, **39.1 МБ** —
+на 12.4 % легче канона, свой `manifest.json` со `style.presets` и md5 стилизованных
+файлов, пути 1:1 с `icons-256/`, `qa_icons.py` → `problems: none`). Сравнение
+«до/после» на 28 иконках — `docs/style-lab/quiet-vign-before-after.png`.
 
 ## Запуск
 
@@ -252,10 +304,12 @@ python3 -m venv .venv
 .venv/bin/pip install -r tools/requirements.txt
 .venv/bin/python tools/cut_icons.py            # все листы
 .venv/bin/python tools/cut_icons.py "RPG Loot Icons 39/RPG Loot Icons 39 Part 1.jpg"
-.venv/bin/python tools/repack_icons.py         # 512 px WebP q92 + enhance (20 мин)
-.venv/bin/python tools/qa_icons.py             # проверка палитрового набора
-.venv/bin/python tools/qa_icons.py icons-512 webp   # проверка перепакованного
-.venv/bin/python tools/measure_quality.py --set icons-512   # таблица стадий enhance
+.venv/bin/python tools/repack_icons.py --size 256 --steer 1.4 --sharpen 0.28 --sharpen-sigma 1.0 --laplacian 0.70
+                                               # канон: 256 px WebP q92 + enhance (~7 мин)
+.venv/bin/python tools/qa_icons.py icons-256 webp   # проверка канона
+.venv/bin/python tools/measure_quality.py --set icons-256   # таблица стадий enhance
+.venv/bin/python tools/stylize.py              # лаборатория стилей (листы + замеры)
+.venv/bin/python tools/stylize.py --apply quiet+vign --out-dir icons-256-quiet
 ```
 
 `cut_icons.py` печатает на лист: режим (`frame` / `grid`), размер найденной сетки,
@@ -266,5 +320,7 @@ python3 -m venv .venv
 модальный размер и выбросы, пустые/слишком мелкие кропы, дубликаты по md5.
 `tools/measure_quality.py` — замеры шума/гало/деталей по стадиям enhance (таблица
 выше), `tools/imgproc.py` — сами фильтры (только numpy + Pillow, без scipy/OpenCV);
+`tools/stylize.py` — художественные пресеты, листы сравнения и выпечка выбранного
+стиля по всему набору (раздел выше, замеры — `docs/style-lab/`);
 `tools/scan_frames.py` — диагностика найденных рамок; `tools/analyze.py` —
 низкоуровневые хелперы (серые прогоны и т.п.).
