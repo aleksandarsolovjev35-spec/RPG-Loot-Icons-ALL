@@ -35,7 +35,7 @@ import time
 from multiprocessing import Pool
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 try:
     import cut_icons as C
@@ -56,6 +56,10 @@ def parse_args(argv=None):
     ap.add_argument('--quality', type=int, default=90, help='lossy quality, ignored with --lossless')
     ap.add_argument('--lossless', action='store_true', help='lossless encode (webp/avif/png)')
     ap.add_argument('--resample', choices=sorted(RESAMPLE), default='lanczos')
+    ap.add_argument('--smooth', type=float, default=0.0,
+                    help='Gaussian blur sigma (px, native crop scale) applied before the '
+                         'upscale to tame source JPEG grain / Lanczos edge halos; '
+                         '0 = off (default).  0.35 is a good middle for the 512 set.')
     ap.add_argument('--out', default=None, help='output dir (default icons-<size>)')
     ap.add_argument('--manifest', default='manifest.json', help='manifest name inside --out')
     ap.add_argument('--only', action='append', default=None,
@@ -69,9 +73,11 @@ def parse_args(argv=None):
 
 
 def encode_one(task):
-    """(array, size, fmt, quality, lossless, resample) -> encoded bytes."""
-    arr, size, fmt, quality, lossless, resample = task
+    """(array, size, fmt, quality, lossless, resample, smooth) -> encoded bytes."""
+    arr, size, fmt, quality, lossless, resample, smooth = task
     im = Image.fromarray(arr, 'RGB')
+    if smooth:
+        im = im.filter(ImageFilter.GaussianBlur(smooth))
     if size and im.size != (size, size):
         im = im.resize((size, size), RESAMPLE[resample])
     if fmt == 'png':
@@ -120,10 +126,11 @@ def main(argv=None):
         print('no sheets matched')
         return 1
 
-    print('sheets: %d | out: %s | %s %s %s | size=%s | workers=%d'
+    print('sheets: %d | out: %s | %s %s %s | size=%s | smooth=%s | workers=%d'
           % (len(todo), os.path.relpath(out_root, ROOT), args.format.upper(),
              'lossless' if args.lossless else 'q%d' % args.quality,
-             args.resample, args.size or 'native', jobs))
+             args.resample, args.size or 'native',
+             ('%g' % args.smooth) if args.smooth else 'off', jobs))
 
     pool = Pool(jobs)
     entries, total_bytes, skipped, failed = [], 0, 0, []
@@ -145,8 +152,8 @@ def main(argv=None):
 
         if args.dry_run:
             sample = crops[:12]
-            tasks = [(c, args.size, args.format, args.quality, args.lossless, args.resample)
-                     for _k, _xy, c in sample]
+            tasks = [(c, args.size, args.format, args.quality, args.lossless,
+                      args.resample, args.smooth) for _k, _xy, c in sample]
             sizes = [len(b) for b in pool.map(encode_one, tasks)]
             avg = sum(sizes) / len(sizes)
             per_sheet = avg * len(crops)
@@ -167,7 +174,8 @@ def main(argv=None):
                 entries.append(entry(path, pack, part, k, xy, crop.shape, name, n,
                                      digest=hashlib.md5(open(fpath, 'rb').read()).hexdigest()))
                 continue
-            tasks.append((crop, args.size, args.format, args.quality, args.lossless, args.resample))
+            tasks.append((crop, args.size, args.format, args.quality, args.lossless,
+                          args.resample, args.smooth))
             meta.append((k, xy, name, fpath, crop.shape))
 
         for (k, xy, name, fpath, native), data in zip(meta, pool.map(encode_one, tasks)):
@@ -194,6 +202,7 @@ def main(argv=None):
             'lossless': bool(args.lossless),
             'size': args.size or 'native',
             'resample': args.resample,
+            'smooth': args.smooth or None,
             'sheet_modes': modes,
             'count': len(entries),
             'total_bytes': total_bytes,
