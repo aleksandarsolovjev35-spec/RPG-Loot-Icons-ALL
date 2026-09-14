@@ -63,7 +63,8 @@ RESAMPLE = {'lanczos': Image.LANCZOS, 'bicubic': Image.BICUBIC, 'bilinear': Imag
 EXT = {'webp': 'webp', 'avif': 'avif', 'png': 'png'}
 
 # enhanced-pipeline knobs exposed on the command line (None -> imgproc default)
-ENHANCE_KEYS = ('denoise', 'black', 'steer', 'sharpen', 'sharpen_clamp', 'stretch')
+ENHANCE_KEYS = ('denoise', 'black', 'steer', 'sharpen', 'sharpen_sigma',
+                'sharpen_clamp', 'laplacian', 'stretch')
 
 
 def parse_args(argv=None):
@@ -87,6 +88,10 @@ def parse_args(argv=None):
                     help='along-contour blur sigma, 0 disables (default 2.2)')
     ap.add_argument('--sharpen', type=float, default=None,
                     help='masked unsharp amount, 0 disables (default 0.35)')
+    ap.add_argument('--sharpen-sigma', type=float, default=None, dest='sharpen_sigma',
+                    help='masked unsharp radius in px (default 1.6)')
+    ap.add_argument('--laplacian', type=float, default=None,
+                    help='mid-band detail amount, 0 disables (default 0)')
     ap.add_argument('--stretch', action='store_true',
                     help='true sinc reconstruction width instead of the Pillow convention')
     ap.add_argument('--out', default=None, help='output dir (default icons-<size>)')
@@ -178,8 +183,9 @@ def main(argv=None):
              'lossless' if args.lossless else 'q%d' % args.quality,
              args.resample, args.size or 'native',
              'off (--raw)' if ecfg is None else
-             'denoise=%.3g steer=%.3g sharpen=%.3g ar-clamp=%s' %
-             (ecfg['denoise'], ecfg['steer'], ecfg['sharpen'], ecfg['clamp']),
+             'denoise=%.3g steer=%.3g sharpen=%.3g laplacian=%.3g ar-clamp=%s' %
+             (ecfg['denoise'], ecfg['steer'], ecfg['sharpen'],
+              ecfg.get('laplacian') or 0, ecfg['clamp']),
              jobs))
 
     pool = Pool(jobs)
