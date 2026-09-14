@@ -1,4 +1,4 @@
-"""Repack cut icons at full colour: upscale, re-encode, emit a manifest.
+"""Repack cut icons at full colour: enhance, upscale, re-encode, emit a manifest.
 
 Why: `cut_icons.py` saves 255-colour palette PNGs, which throws away >97% of
 the source gradients (median 9339 unique colours per crop), and the crops are
@@ -6,23 +6,37 @@ not normalised (21 sizes, 146-153 px, 40% not square).  This tool re-cuts the
 sheets with the very same detector (`cut_icons.iter_cell_crops`, so numbering
 and cell geometry match `cut_icons/` exactly) and re-encodes the crops:
 
-    crop (full colour)  ->  resize to --size (Lanczos by default)
+    crop (full colour)  ->  enhance (tools/imgproc.py, see --raw to skip)
+                        ->  resize to --size (Lanczos by default)
                         ->  encode (webp / avif / png)
                         ->  icons-<size>/<pack>/partN/icon_NNN.<ext>
                         ->  icons-<size>/manifest.json
 
-Lossless stays out of reach for the upscaled set: 512 px lossless WebP is
-~145 KB/icon (580 MB for the pack), while lossy q90 is ~22 KB (~87 MB) and is
-visually identical at VTT sizes (measured: 0.5/255 mean error after the icon
-is displayed at 64 px).  Sharpening was rejected - unsharp mask produced
-visible halos on the source art.
+The enhance pass attacks the four artefacts of the source chain (a ~148 px
+JPEG crop stretched 3.46x), all of them measured on this set - see
+`imgproc.py` and the "noise" section of the README:
+
+  1. JPEG mosquito noise and 8 px blockiness in the flats -> guided denoise;
+  2. ringing of the resampler around silhouettes on black -> anti-ringing
+     clamp in `resample_ar` (a light object on black gets a halo up to 19/255
+     with plain Lanczos, 0 with the clamp);
+  3. pixel staircase of the small artwork -> steered blur along the contour;
+  4. soft contours -> masked unsharp (threshold + clamp: no halo, no noise
+     amplification - a plain unsharp was visible and is still not used).
+
+Measured on the full set (every third icon, see the README table): flat-area
+noise 0.112 -> 0.037 levels of 255 (median per icon, p90 0.285 -> 0.135), halo
+around silhouettes 0.457 -> 0.237 levels at p99, fine-detail energy kept at
+hf 0.948 of an honest resize, and at q92 the files are smaller than before.
 
 Examples
 --------
-    python3 tools/repack_icons.py                       # 512px webp q90
+    python3 tools/repack_icons.py                       # 512px webp q92, enhanced
+    python3 tools/repack_icons.py --raw                 # old pipeline, no enhance
     python3 tools/repack_icons.py --size 256 --quality 92
     python3 tools/repack_icons.py --format avif --quality 70   # ~40% smaller
     python3 tools/repack_icons.py --size 0              # native crop size
+    python3 tools/repack_icons.py --sharpen 0 --steer 0 --denoise 0   # tune
     python3 tools/repack_icons.py --limit 1 --out /tmp/x   # smoke test
 """
 import argparse
@@ -39,12 +53,17 @@ from PIL import Image
 
 try:
     import cut_icons as C
+    import imgproc as I
 except ImportError:
     from tools import cut_icons as C
+    from tools import imgproc as I
 
 ROOT = C.ROOT
 RESAMPLE = {'lanczos': Image.LANCZOS, 'bicubic': Image.BICUBIC, 'bilinear': Image.BILINEAR}
 EXT = {'webp': 'webp', 'avif': 'avif', 'png': 'png'}
+
+# enhanced-pipeline knobs exposed on the command line (None -> imgproc default)
+ENHANCE_KEYS = ('denoise', 'black', 'steer', 'sharpen', 'sharpen_clamp', 'stretch')
 
 
 def parse_args(argv=None):
@@ -53,9 +72,23 @@ def parse_args(argv=None):
     ap.add_argument('--size', type=int, default=512,
                     help='output side in px, square; 0 = keep the native crop size (default 512)')
     ap.add_argument('--format', choices=sorted(EXT), default='webp')
-    ap.add_argument('--quality', type=int, default=90, help='lossy quality, ignored with --lossless')
+    ap.add_argument('--quality', type=int, default=92, help='lossy quality, ignored with --lossless')
     ap.add_argument('--lossless', action='store_true', help='lossless encode (webp/avif/png)')
     ap.add_argument('--resample', choices=sorted(RESAMPLE), default='lanczos')
+    ap.add_argument('--raw', action='store_true',
+                    help='skip the enhance pass (reproduce the pre-2026 pipeline exactly)')
+    ap.add_argument('--no-ar-clamp', action='store_true',
+                    help='resample without the anti-ringing clamp (plain Lanczos)')
+    ap.add_argument('--denoise', type=float, default=None,
+                    help='source denoise strength, 0 disables (default 0.018)')
+    ap.add_argument('--black', type=float, default=None,
+                    help='luma below which the black background is flattened (default 0.010)')
+    ap.add_argument('--steer', type=float, default=None,
+                    help='along-contour blur sigma, 0 disables (default 2.2)')
+    ap.add_argument('--sharpen', type=float, default=None,
+                    help='masked unsharp amount, 0 disables (default 0.35)')
+    ap.add_argument('--stretch', action='store_true',
+                    help='true sinc reconstruction width instead of the Pillow convention')
     ap.add_argument('--out', default=None, help='output dir (default icons-<size>)')
     ap.add_argument('--manifest', default='manifest.json', help='manifest name inside --out')
     ap.add_argument('--only', action='append', default=None,
@@ -68,9 +101,28 @@ def parse_args(argv=None):
     return ap.parse_args(argv)
 
 
+def enhance_cfg(args):
+    """The imgproc.enhance() config for this run, or None with --raw."""
+    if args.raw:
+        return None
+    cfg = dict(I.DEFAULTS)
+    cfg['clamp'] = not args.no_ar_clamp
+    if args.stretch:
+        cfg['stretch'] = True
+    for key in ENHANCE_KEYS:
+        val = getattr(args, key, None)
+        if val is not None:
+            cfg[key] = val
+    cfg['size'] = args.size or 0
+    return cfg
+
+
 def encode_one(task):
-    """(array, size, fmt, quality, lossless, resample) -> encoded bytes."""
-    arr, size, fmt, quality, lossless, resample = task
+    """(array, size, fmt, quality, lossless, resample[, cfg]) -> encoded bytes."""
+    arr, size, fmt, quality, lossless, resample = task[:6]
+    cfg = task[6] if len(task) > 6 else None
+    if cfg is not None:
+        arr = I.enhance(arr, cfg)
     im = Image.fromarray(arr, 'RGB')
     if size and im.size != (size, size):
         im = im.resize((size, size), RESAMPLE[resample])
@@ -110,6 +162,7 @@ def main(argv=None):
     out_root = os.path.abspath(out_root)
     jobs = args.jobs or (os.cpu_count() or 2)
     ext = EXT[args.format]
+    ecfg = enhance_cfg(args)
 
     todo = sheets()
     if args.only:
@@ -120,10 +173,14 @@ def main(argv=None):
         print('no sheets matched')
         return 1
 
-    print('sheets: %d | out: %s | %s %s %s | size=%s | workers=%d'
+    print('sheets: %d | out: %s | %s %s %s | size=%s | enhance=%s | workers=%d'
           % (len(todo), os.path.relpath(out_root, ROOT), args.format.upper(),
              'lossless' if args.lossless else 'q%d' % args.quality,
-             args.resample, args.size or 'native', jobs))
+             args.resample, args.size or 'native',
+             'off (--raw)' if ecfg is None else
+             'denoise=%.3g steer=%.3g sharpen=%.3g ar-clamp=%s' %
+             (ecfg['denoise'], ecfg['steer'], ecfg['sharpen'], ecfg['clamp']),
+             jobs))
 
     pool = Pool(jobs)
     entries, total_bytes, skipped, failed = [], 0, 0, []
@@ -145,7 +202,7 @@ def main(argv=None):
 
         if args.dry_run:
             sample = crops[:12]
-            tasks = [(c, args.size, args.format, args.quality, args.lossless, args.resample)
+            tasks = [(c, args.size, args.format, args.quality, args.lossless, args.resample, ecfg)
                      for _k, _xy, c in sample]
             sizes = [len(b) for b in pool.map(encode_one, tasks)]
             avg = sum(sizes) / len(sizes)
@@ -167,7 +224,8 @@ def main(argv=None):
                 entries.append(entry(path, pack, part, k, xy, crop.shape, name, n,
                                      digest=hashlib.md5(open(fpath, 'rb').read()).hexdigest()))
                 continue
-            tasks.append((crop, args.size, args.format, args.quality, args.lossless, args.resample))
+            tasks.append((crop, args.size, args.format, args.quality, args.lossless,
+                          args.resample, ecfg))
             meta.append((k, xy, name, fpath, crop.shape))
 
         for (k, xy, name, fpath, native), data in zip(meta, pool.map(encode_one, tasks)):
@@ -189,6 +247,7 @@ def main(argv=None):
             'generated': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
             'source_set': 'cut_icons/ (same detector, same numbering)',
             'crop': 'tools/cut_icons.py:iter_cell_crops',
+            'enhance': enhance_report(ecfg, args),
             'format': args.format,
             'quality': None if args.lossless else args.quality,
             'lossless': bool(args.lossless),
@@ -211,6 +270,14 @@ def main(argv=None):
             print('   %s  (%s)' % (os.path.relpath(p, ROOT), why))
     print('done in %.0fs' % (time.time() - t0))
     return 0
+
+
+def enhance_report(ecfg, args):
+    """What the enhance pass did, so a rebuild can be reproduced from the manifest."""
+    if ecfg is None:
+        return {'enabled': False, 'pipeline': 'raw (no enhance pass)'}
+    cfg = {k: v for k, v in ecfg.items() if k != 'size'}
+    return {'enabled': True, 'pipeline': 'tools/imgproc.py:enhance', 'config': cfg}
 
 
 def entry(path, pack, part, index, xy, native, name, nbytes, digest):
