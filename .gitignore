@@ -2,7 +2,7 @@
 __pycache__/
 .venv/
 
-# Derived icon sets (rebuilt in minutes by tools/cut_icons.py + tools/repack_icons.py).
-# Kept out of git on purpose: cut_icons/ = 58 MB, icons-512/ = 84 MB.
-cut_icons/
+# Per-size repacks (tools/repack_icons.py) are derived data: 84 MB per size and
+# several sizes per taste, rebuilt in ~2.5 minutes:
+#   .venv/bin/python tools/repack_icons.py --size 512 --format webp --quality 90
 icons-*/
