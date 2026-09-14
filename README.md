@@ -12,9 +12,13 @@
 Результат: `cut_icons/<пак>/partN/icon_NNN.png` (палитра 255 цветов, ~148×149 для
 листов с каймой, ~151×151 для листов без неё). Всего 4100 иконок.
 
-Канонический игровой набор — **`icons-256/`**: 4100 WebP 256×256, enhance + Laplacian
-(q92, ~43 МБ). 256 — честный апскейл ×1.73 от кропа, без мыла 512. `icons-512/`
-остаётся как предыдущий полный рост.
+Актуальный игровой набор — **`icons-256/`**: 4100 WebP 256×256 (q92, 39.1 МБ) —
+чистый набор плюс стиль `quiet+vign`. 256 — честный апскейл ×1.73 от кропа, без
+мыла 512. Чистая база без стиля лежит рядом в **`icons-256-base/`** (44.7 МБ):
+это она собирается `repack_icons.py` и она же служит источником для стилизации;
+`icons-512/` остаётся как предыдущий полный рост. Роли наборов записаны в их
+`manifest.json` (`role`: `actual` / `base` / `previous`), проверка —
+`tools/verify_set.py`, вся последовательность сборки — `docs/PIPELINE.md`.
 
 ## Универсальный алгоритм
 
@@ -218,8 +222,8 @@ enhance занимает на 6 % меньше, чем старый q90 без �
 ```
 
 ```bash
-.venv/bin/python tools/repack_icons.py --size 256 --steer 1.4 --sharpen 0.28 --sharpen-sigma 1.0 --laplacian 0.70
-                                                              # канон: 256 px WebP q92 + Laplacian
+.venv/bin/python tools/repack_icons.py --size 256 --steer 1.4 --sharpen 0.28 --sharpen-sigma 1.0 --laplacian 0.70 --out icons-256-base
+                                                              # база: 256 px WebP q92 + Laplacian
 .venv/bin/python tools/repack_icons.py                        # 512 px, WebP q92, enhanced
 .venv/bin/python tools/repack_icons.py --format avif --quality 70
 .venv/bin/python tools/repack_icons.py --size 0               # размер кропа как есть
@@ -239,11 +243,70 @@ enhance занимает на 6 % меньше, чем старый q90 без �
 
 Наборы версионируются, чтобы клон работал без прогона тулчейна:
 
-* `cut_icons/` — 4100 палитровых PNG (58 МБ);
-* **`icons-256/`** — 4100 WebP 256×256 + `manifest.json` (~43 МБ), канон;
-* `icons-512/` — 4100 WebP 512×512 + `manifest.json` (79.5 МБ).
+* `cut_icons/` — 4100 палитровых PNG, промежуточный выход `cut_icons.py`;
+* **`icons-256/`** — 4100 WebP 256×256 + `manifest.json` (39.1 МБ), **актуальный
+  набор**: база + `quiet+vign`;
+* `icons-256-base/` — 4100 WebP 256×256 + `manifest.json` (44.7 МБ), чистая база
+  (enhance + Laplacian) без стиля — источник для `tools/stylize.py`;
+* `icons-512/` — 4100 WebP 512×512 + `manifest.json` (83.3 МБ), предыдущий полный рост;
+* `icons-256-<стиль>/` — примерка любого другого пресета (30–50 МБ): в git стоит
+  держать базу и один актуальный стиль, каждый следующий — ещё ~40 МБ к клону.
 
 256-набор собирается из листов ~7 минут (два процесса).
+
+## Стилизация: что ещё можно сделать с картинкой (`tools/stylize.py`)
+
+Всё, что выше, картинку **чистит** — убирает шум JPEG, звон ресемплера, лестницу
+148 px. Стилизация меняет **как** иконка выглядит. `tools/stylize.py` — «лаборатория
+стилей»: 13 пресетов на тех же примитивах (только numpy + Pillow), замеры и листы
+сравнения; можно выпечь выбранный стиль сразу по всем 4100 иконкам.
+
+```bash
+.venv/bin/python tools/stylize.py                     # листы + таблица замеров (читает базу)
+.venv/bin/python tools/stylize.py --presets grade,quiet+vign
+# актуальный набор: база + выбранный стиль -> icons-256
+.venv/bin/python tools/stylize.py --set icons-256-base --apply quiet+vign --out-dir icons-256
+```
+
+| стиль | что делает | Δ от базы | КБ/иконку |
+|---|---|---|---|
+| `grade` | S-кривая + вибранс + сплит-тонирование | 10.2 | 10.5 (×1.07) |
+| `cel` | 5 плоских тонов (banded luma) + насыщенность | 5.6 | 10.6 (×1.07) |
+| `ink` | затемняет сами контуры, без светлой каймы | 12.8 | 9.9 (×1.01) |
+| `rim` | контровой свет: подсветка силуэта со стороны верхнего левого света | 5.2 | 10.3 (×1.04) |
+| `glow` | bloom только по ярким местам (зелья, самоцветы, магия) | 11.2 | 8.6 (×0.88) |
+| `paint` | Kuwahara: фасетки вместо шума | 11.8 | 9.9 (×1.01) |
+| `quiet` | гасит цветное свечение за предметом к одному тёмному тону | 5.5 | 8.9 (×0.90) |
+| `vign` | фиксированная виньетка по углам | 1.8 | 9.5 (×0.96) |
+| `warm` / `cold` | тёплый (факельный) / холодный (лунный) свет | 8.7 / 6.0 | 10.4 / 10.1 |
+| `palette` | все 4100 → k-means 48 цветов | 7.1 | 13.6 (×1.38) |
+| `pixel` | 64 px + 32 цвета, nearest ×4 (другая ветка арта) | 11.9 | 4.8 (×0.49) |
+| `loot` | `grade` + `quiet` + `rim` + `glow` — «премиальный пак» | 14.4 | 9.6 (×0.97) |
+
+Цепочки пишутся через `+`: `--presets quiet+vign`, `--apply grade+rim`. Цифры в
+таблице — вывод `tools/stylize.py` по умолчанию (8 иконок), вес — замер по 150.
+
+Главный вывод лаборатории: набор разъезжается не стилем рисунка, а **подложками** —
+у каждой иконки за предметом своё свечение/дым своей яркости (в кадре до +40
+уровней из 255), поэтому 4100 иконок в гриде лута выглядят как 4100 разных
+картинок. `quiet` (+`vign`) приводит подложки к одному тёмному тону, и это
+единственный пресет, который улучшает набор **и вес одновременно**: 44.7 → ~39.8 МБ
+на набор (плоский фон лучше жмётся). `palette`, наоборот, делает файлы на 38 %
+тяжелее — квантование плодит резкие границы, которые WebP дороже градиентов.
+
+Листы и полный разбор с метриками: `docs/style-lab/` (`grid-compare.png` —
+имитация сетки лута, `style-zoom.png` — 200 % без сглаживания,
+`style-sheet.png` — все пресеты на 8 иконках).
+
+Выпечено в **`icons-256/`**: 4100 WebP 256×256, q92, **39.1 МБ** — на 12.4 % легче
+базы, манифест с `role: actual`, `style.presets: ["quiet","vign"]` и
+`derived_from: icons-256-base`, md5 стилизованных файлов, пути 1:1 с базой,
+`qa_icons.py` и `verify_set.py` → `problems: none`. Сравнение «до/после» на
+28 иконках — `docs/style-lab/quiet-vign-before-after.png`.
+
+Вся последовательность от листов до актуального набора (с решением по каждому
+шагу и ожидаемыми числами) — **`docs/PIPELINE.md`**, выполнить её целиком можно
+так: `tools/build_set.sh all`, а проверить готовые наборы — `tools/build_set.sh verify`.
 
 ## Запуск
 
@@ -252,10 +315,13 @@ python3 -m venv .venv
 .venv/bin/pip install -r tools/requirements.txt
 .venv/bin/python tools/cut_icons.py            # все листы
 .venv/bin/python tools/cut_icons.py "RPG Loot Icons 39/RPG Loot Icons 39 Part 1.jpg"
-.venv/bin/python tools/repack_icons.py         # 512 px WebP q92 + enhance (20 мин)
-.venv/bin/python tools/qa_icons.py             # проверка палитрового набора
-.venv/bin/python tools/qa_icons.py icons-512 webp   # проверка перепакованного
-.venv/bin/python tools/measure_quality.py --set icons-512   # таблица стадий enhance
+.venv/bin/python tools/repack_icons.py --size 256 --steer 1.4 --sharpen 0.28 --sharpen-sigma 1.0 --laplacian 0.70
+                                               # чистая база: 256 px WebP q92 + enhance (~7 мин)
+.venv/bin/python tools/qa_icons.py icons-256-base webp   # проверка базы
+.venv/bin/python tools/measure_quality.py --set icons-256-base   # таблица стадий enhance
+.venv/bin/python tools/stylize.py              # лаборатория стилей (листы + замеры)
+.venv/bin/python tools/verify_set.py icons-256 # контракт манифеста актуального набора
+tools/build_set.sh all                         # вся сборка: cut -> база -> стиль -> проверки
 ```
 
 `cut_icons.py` печатает на лист: режим (`frame` / `grid`), размер найденной сетки,
@@ -266,5 +332,10 @@ python3 -m venv .venv
 модальный размер и выбросы, пустые/слишком мелкие кропы, дубликаты по md5.
 `tools/measure_quality.py` — замеры шума/гало/деталей по стадиям enhance (таблица
 выше), `tools/imgproc.py` — сами фильтры (только numpy + Pillow, без scipy/OpenCV);
+`tools/stylize.py` — художественные пресеты, листы сравнения и выпечка выбранного
+стиля по всему набору (раздел выше, замеры — `docs/style-lab/`);
+`tools/verify_set.py` — проверка набора против его манифеста (md5, байты, размеры
+из WebP-заголовка, отсутствие лишних файлов и дублей); `tools/build_set.sh` —
+закреплённая последовательность сборки (см. `docs/PIPELINE.md`);
 `tools/scan_frames.py` — диагностика найденных рамок; `tools/analyze.py` —
 низкоуровневые хелперы (серые прогоны и т.п.).
