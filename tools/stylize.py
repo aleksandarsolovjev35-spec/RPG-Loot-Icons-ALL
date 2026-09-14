@@ -6,9 +6,17 @@ icon reads.  This module is the other half: filters that change the style of the
 picture, built on the same numpy primitives so the toolchain still needs nothing
 but `pip install pillow numpy`.
 
+Sets in this repo: `icons-256-base/` is the clean enhanced set (repack output,
+the source for styling), and `icons-256/` is the *actual* set - that same base
+with `quiet+vign` baked in.  So the canonical run is:
+
+    python3 tools/stylize.py --set icons-256-base --apply quiet+vign --out-dir icons-256
+
+and the lab always measures against the clean base:
+
     python3 tools/stylize.py                       # lab sheet + metrics table
     python3 tools/stylize.py --presets grade,ink   # only some styles
-    python3 tools/stylize.py --apply paint --out-dir icons-256-paint
+    python3 tools/stylize.py --apply paint --out-dir /tmp/probe --limit 200
 
 Presets (see PRESETS).  Two of them fix set-level inconsistency rather than
 adding "art":
@@ -420,7 +428,7 @@ def render_sheet(rows, header, path, dst, pad=12, cell=200, label_w=232, note=''
     H = 84 + len(rows) * (cell + pad + 8)
     img = Image.new('RGB', (W, H), (26, 26, 30))
     dr = ImageDraw.Draw(img)
-    dr.text((pad, 14), 'RPG Loot Icons — стили поверх канона icons-256 (WebP q92, 256×256)',
+    dr.text((pad, 14), 'RPG Loot Icons — стили поверх базы icons-256-base (WebP q92, 256×256)',
             font=f_title, fill=(240, 240, 245))
     dr.text((pad, 42), note or 'апскейл 1:1 для просмотра', font=f_small, fill=(150, 150, 160))
     for c, name in enumerate(header):
@@ -449,7 +457,7 @@ def zoom_sheet(rows, header, path, cell=170, zoom=2.0, crop=118):
     H = 96 + len(rows) * (max(cell, tw) + 10)
     img = Image.new('RGB', (W, H), (26, 26, 30))
     dr = ImageDraw.Draw(img)
-    dr.text((12, 14), 'Стили в 1:1 и в 200%% (центр %d px) — канон icons-256' % crop,
+    dr.text((12, 14), 'Стили в 1:1 и в 200%% (центр %d px) — база icons-256-base' % crop,
             font=f_title, fill=(240, 240, 245))
     dr.text((12, 44), 'слева каждая иконка целиком в 256 px, справа — фрагмент x%.1f без сглаживания'
             % zoom, font=f_small, fill=(150, 150, 160))
@@ -521,8 +529,8 @@ def run_lab(args):
         ctx['pal_small'] = build_palette(imgs, 32, seed=1)
         print('palette built from %d icons' % len(imgs), flush=True)
 
-    rows = [('Канон icons-256 — база', canon)]
-    spec_rows = {'canon': ('Канон icons-256 — база', canon)}
+    rows = [('База icons-256-base — без стиля', canon)]
+    spec_rows = {'canon': ('База icons-256-base — без стиля', canon)}
     table = []
     for spec in args.presets:
         try:
@@ -543,7 +551,7 @@ def run_lab(args):
               flush=True)
 
     os.makedirs(os.path.join(ROOT, args.out), exist_ok=True)
-    note = 'один разрез, один ряд — апскейл 1:1 до %d px для просмотра' % args.cell
+    note = 'база %s, один разрез, один ряд — апскейл 1:1 до %d px для просмотра' % (args.set, args.cell)
     for dst, name in ((args.cell, 'style-sheet.png'), (args.cell // 2, 'style-sheet-small.png')):
         p = render_sheet(rows, header, os.path.join(ROOT, args.out, name), dst, cell=args.cell, note=note)
         print('wrote', os.path.relpath(p, ROOT), '(%d KB)' % (os.path.getsize(p) // 1024))
@@ -576,7 +584,7 @@ def run_lab(args):
     print()
     print('| стиль | цветов | хрома тела | контур, px | фон (ярк/хрома) | Δ от канона | e64 | мс/иконку |')
     print('|---|---|---|---|---|---|---|---|')
-    print('| канон icons-256 | %.0f | %.3f | %.2f | %.2f / %.1f | 0 | 0 | 0 |'
+    print('| база icons-256-base | %.0f | %.3f | %.2f | %.2f / %.1f | 0 | 0 | 0 |'
           % (base[:, 0].mean(), base[:, 1].mean(), base[:, 2].mean(),
              base[:, 3].mean(), base[:, 4].mean()))
     for title, name, m, dt in table:
@@ -585,7 +593,7 @@ def run_lab(args):
                  m[:, 3].mean(), m[:, 4].mean(), m[:, 5].mean(), m[:, 6].mean(),
                  dt / len(canon) * 1000))
     print('\n(выборка: %d иконок; цвета — среднее уникальных цветов, фон — средняя яркость и '
-          'хрома чёрных пикселей канона, Δ/e64 — средняя |разница| с каноном в уровнях 255)'
+          'хрома чёрных пикселей базы, Δ/e64 — средняя |разница| с базой в уровнях 255)'
           % len(canon))
     return 0
 
@@ -613,6 +621,53 @@ def _work_one(rel):
     dst = os.path.join(_WORK['out'], rel)
     Image.fromarray(y).save(dst, quality=_WORK['quality'], method=6)
     return rel, hashlib.md5(open(dst, 'rb').read()).hexdigest(), os.path.getsize(dst)
+
+
+def set_label(root):
+    """Human label for a set directory, from its manifest (role + baked style)."""
+    name = os.path.basename(root.rstrip('/'))
+    man_path = os.path.join(ROOT, root, 'manifest.json')
+    if not os.path.exists(man_path):
+        return name
+    try:
+        man = json.load(open(man_path))
+    except ValueError:
+        return name
+    role = {'actual': 'актуальный', 'base': 'база', 'previous': 'предыдущий'}.get(
+        man.get('role'), man.get('role') or '')
+    style = man.get('style') or {}
+    presets = '+'.join(style.get('presets') or [])
+    if style:
+        return '%s %s (%s)' % (role, name, presets)
+    return '%s %s (%s)' % (role, name, 'без стиля')
+
+
+def run_compare(args):
+    """Render a before/after grid for two sets - files read from disk, not recomputed."""
+    pairs = [s.strip() for s in args.compare.split(',')]
+    if len(pairs) != 2:
+        print('--compare takes exactly two set dirs, e.g. --compare icons-256-base,icons-256')
+        return 2
+    a_dir, b_dir = pairs
+    man = json.load(open(os.path.join(ROOT, b_dir, 'manifest.json')))
+    files = [e['file'] for e in man['icons']]
+    step = max(1, len(files) // args.grid_icons)
+    picks = files[::step][:args.grid_icons]
+    panels = []
+    for d in (a_dir, b_dir):
+        imgs = [np.asarray(Image.open(os.path.join(ROOT, d, f)).convert('RGB')) for f in picks]
+        panels.append(('%s — %d иконок' % (set_label(d), len(picks)), imgs))
+    da = [np.abs(x.astype(np.int16) - y.astype(np.int16)).mean()
+          for (x, y) in zip(panels[0][1], panels[1][1])]
+    out = args.compare_out or os.path.join(args.out, 'compare-%s-%s.png'
+                                           % (os.path.basename(a_dir), os.path.basename(b_dir)))
+    os.makedirs(os.path.dirname(os.path.join(ROOT, out)), exist_ok=True)
+    note = ('оба ряда прочитаны с диска: %s против %s; средняя |разница| %.1f уровня '
+            '(мин %.1f, макс %.1f)' % (a_dir, b_dir, float(np.mean(da)), float(min(da)), float(max(da))))
+    p = render_grid_sheet(panels, os.path.join(ROOT, out), note=note)
+    print('mean |%s - %s| over %d icons: %.1f levels' % (a_dir, b_dir, len(picks), float(np.mean(da))))
+    print('wrote', os.path.relpath(p, ROOT), '(%d KB)' % (os.path.getsize(p) // 1024))
+    return 0
 
 
 def run_apply(args):
@@ -674,6 +729,11 @@ def run_apply(args):
     m2['icons'] = out_icons
     m2['count'] = len(out_icons)
     m2['total_bytes'] = sum(e['bytes'] for e in out_icons)
+    # the styled set was produced now; the base's timestamp stays in base_pipeline
+    base_generated = m2.get('generated')
+    m2['generated'] = m2['style']['generated']
+    if base_generated and 'base_pipeline' in m2:
+        m2['base_pipeline']['generated'] = base_generated
     m2['style'] = {'presets': [n.strip() for n in spec.split('+') if n.strip()],
                    'title': title, 'source_set': args.set, 'hue_deg': args.hue_deg,
                    'generated': time.strftime('%Y-%m-%dT%H:%M:%S%z')}
@@ -687,7 +747,9 @@ def run_apply(args):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--set', default='icons-256', help='source set (default icons-256)')
+    ap.add_argument('--set', default='icons-256-base',
+                    help='source set (default icons-256-base, the clean set; '
+                         'icons-256 already has quiet+vign baked in)')
     ap.add_argument('--presets', default=','.join(PRESETS),
                     help='comma-separated subset of: %s (chains allowed: grade+rim)'
                          % ', '.join(PRESETS))
@@ -707,12 +769,21 @@ def main(argv=None):
                     help='how many icons in the loot-grid sheet')
     ap.add_argument('--hue-deg', type=float, default=0.0, dest='hue_deg',
                     help='global hue rotation in degrees (grade/warm/cold/loot)')
+    ap.add_argument('--compare', default=None,
+                    help='render a before/after grid for two set dirs, '
+                         'e.g. icons-256-base,icons-256')
+    ap.add_argument('--compare-out', default=None, dest='compare_out',
+                    help='where the --compare sheet goes (default <out>/compare-A-B.png)')
     ap.add_argument('--apply', default=None, help='bake this preset over the whole set')
-    ap.add_argument('--out-dir', default=None, help='target dir for --apply')
+    ap.add_argument('--out-dir', default=None,
+                    help='target dir for --apply (default <set>-<preset>; the actual set '
+                         'is icons-256, e.g. --apply quiet+vign --out-dir icons-256)')
     ap.add_argument('--limit', type=int, default=0, help='stop after N icons (--apply)')
     ap.add_argument('--jobs', type=int, default=0, help='0 = cpu count (--apply)')
     args = ap.parse_args(argv)
     args.presets = [p.strip() for p in args.presets.split(',') if p.strip()]
+    if args.compare:
+        return run_compare(args)
     if args.apply:
         if not args.out_dir:
             args.out_dir = '%s-%s' % (args.set, args.apply)

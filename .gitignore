@@ -5,8 +5,10 @@ __pycache__/
 # Icon sets are versioned on purpose:
 #   cut_icons/        - 4100 palette PNGs, output of tools/cut_icons.py
 #   icons-512/        - 4100 WebP 512x512 + manifest.json, output of tools/repack_icons.py
-#   icons-256/        - 4100 WebP 256x256 + manifest.json, the canon set
-#   icons-256-quiet/  - the same 4100 icons with the quiet+vign style baked in
-#                       (tools/stylize.py --apply quiet+vign), 12.4% smaller files
+#   icons-256-base/   - 4100 WebP 256x256 + manifest.json, the clean base set
+#                       (tools/repack_icons.py --size 256 ... --out icons-256-base)
+#   icons-256/        - the actual set: the base with quiet+vign baked in
+#                       (tools/stylize.py --set icons-256-base --apply quiet+vign)
+#                       - 12.4% smaller files, role=actual in its manifest
 # All of them are reproducible from the 82 sheets in the repo root, but they are
 # kept in git so a clone works offline without running the toolchain.

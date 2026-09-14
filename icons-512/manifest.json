@@ -1,4 +1,6 @@
 {
+ "role": "previous",
+ "note": "previous full-growth set (512 px, no style). The gameplay sets are icons-256-base/ (clean) and icons-256/ (actual, quiet+vign).",
  "generated": "2026-09-14T08:51:13+0000",
  "source_set": "cut_icons/ (same detector, same numbering)",
  "crop": "tools/cut_icons.py:iter_cell_crops",

@@ -161,10 +161,39 @@ def sheet_dirs(path):
     return pack, part
 
 
+def guard_target(out_root, manifest_name='manifest.json', force=False):
+    """Refuse to overwrite a set that carries a baked style (role == "actual").
+
+    `icons-256/` is no longer the raw toolchain output: it is the clean base with
+    the quiet+vign style baked in by tools/stylize.py.  Re-running the repacker
+    over it would silently throw the style away, so the write goes to
+    `icons-256-base/` instead (or needs --force to say "I mean it").
+    """
+    man = os.path.join(out_root, manifest_name)
+    if force or not os.path.exists(man):
+        return None
+    try:
+        prev = json.load(open(man))
+    except (ValueError, OSError):
+        return None
+    style = prev.get('style') or {}
+    if prev.get('role') == 'actual' or style:
+        return ('%s is a styled set (role=%s, style=%s) - re-running the repacker '
+                'would drop the style.\n  write the clean base instead, e.g. '
+                '--out icons-256-base, or pass --force'
+                % (os.path.relpath(out_root, ROOT), prev.get('role', '?'),
+                   '+'.join(style.get('presets', [])) or '?'))
+    return None
+
+
 def main(argv=None):
     args = parse_args(argv)
     out_root = args.out or os.path.join(ROOT, 'icons-%d' % args.size if args.size else 'icons-native')
     out_root = os.path.abspath(out_root)
+    stop = guard_target(out_root, args.manifest, args.force)
+    if stop:
+        print(stop)
+        return 2
     jobs = args.jobs or (os.cpu_count() or 2)
     ext = EXT[args.format]
     ecfg = enhance_cfg(args)
