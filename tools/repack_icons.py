@@ -24,9 +24,10 @@ JPEG crop stretched 3.46x), all of them measured on this set - see
   4. soft contours -> masked unsharp (threshold + clamp: no halo, no noise
      amplification - a plain unsharp was visible and is still not used).
 
-Measured on the full set (see README table): flat-area noise 0.19 -> 0.08
-levels of 255, halo around silhouettes 0.38 -> 0.19 levels, fine-detail
-energy preserved, and at q92 the files are no larger than before.
+Measured on the full set (every third icon, see the README table): flat-area
+noise 0.112 -> 0.037 levels of 255 (median per icon, p90 0.285 -> 0.135), halo
+around silhouettes 0.457 -> 0.237 levels at p99, fine-detail energy kept at
+hf 0.948 of an honest resize, and at q92 the files are smaller than before.
 
 Examples
 --------
