@@ -1,0 +1,67 @@
+{
+  "source_set": "icons-256-v2",
+  "method": "edge-safe masked unsharp; no resampling, geometry, colour grading, or generative redraw",
+  "parameters": {
+    "sigma": 0.72,
+    "amount": 0.48,
+    "thr": 0.006,
+    "knee": 0.028,
+    "clamp": 0.026
+  },
+  "icons": [
+    {
+      "name": "rope",
+      "kind": "тонкие линии",
+      "source": "icons-256-v2/RPG Loot Icons 20/part2/icon_036.webp",
+      "output": "docs/quality-lab/256-v2-sharp-demo/rope-sharp.png",
+      "mean_delta": 0.39166259765625,
+      "max_delta": 7,
+      "changed_px_percent": 13.543701171875
+    },
+    {
+      "name": "bottle",
+      "kind": "мягкие градиенты",
+      "source": "icons-256-v2/RPG Loot Icons 26/part1/icon_048.webp",
+      "output": "docs/quality-lab/256-v2-sharp-demo/bottle-sharp.png",
+      "mean_delta": 0.3791249593098958,
+      "max_delta": 7,
+      "changed_px_percent": 12.51373291015625
+    },
+    {
+      "name": "scroll",
+      "kind": "грани и орнамент",
+      "source": "icons-256-v2/RPG Loot Icons 12/part2/icon_019.webp",
+      "output": "docs/quality-lab/256-v2-sharp-demo/scroll-sharp.png",
+      "mean_delta": 0.6070709228515625,
+      "max_delta": 7,
+      "changed_px_percent": 22.357177734375
+    },
+    {
+      "name": "bow",
+      "kind": "тонкие линии",
+      "source": "icons-256-v2/RPG Loot Icons 36/part2/icon_021.webp",
+      "output": "docs/quality-lab/256-v2-sharp-demo/bow-sharp.png",
+      "mean_delta": 0.4436289469401042,
+      "max_delta": 7,
+      "changed_px_percent": 17.46063232421875
+    },
+    {
+      "name": "chest",
+      "kind": "крупные края",
+      "source": "icons-256-v2/RPG Loot Icons 24/part1/icon_011.webp",
+      "output": "docs/quality-lab/256-v2-sharp-demo/chest-sharp.png",
+      "mean_delta": 0.5813090006510416,
+      "max_delta": 7,
+      "changed_px_percent": 22.03826904296875
+    },
+    {
+      "name": "cacao",
+      "kind": "мелкая фактура",
+      "source": "icons-256-v2/RPG Loot Icons 30/part2/icon_028.webp",
+      "output": "docs/quality-lab/256-v2-sharp-demo/cacao-sharp.png",
+      "mean_delta": 0.4789530436197917,
+      "max_delta": 7,
+      "changed_px_percent": 22.17559814453125
+    }
+  ]
+}
