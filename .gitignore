@@ -10,5 +10,10 @@ __pycache__/
 #   icons-256/        - the actual set: the base with quiet+vign baked in
 #                       (tools/stylize.py --set icons-256-base --apply quiet+vign)
 #                       - 12.4% smaller files, role=actual in its manifest
+#   icons-256-v2/     - candidate for the next actual set: the base with
+#                       quiet+flat+vign+fit+punch (tools/audit_set.py found the
+#                       base's exposure/contrast/saturation still all over the
+#                       place; see docs/quality-lab/) - role=candidate in its
+#                       manifest, nothing in the repo points at it yet
 # All of them are reproducible from the 82 sheets in the repo root, but they are
 # kept in git so a clone works offline without running the toolchain.
