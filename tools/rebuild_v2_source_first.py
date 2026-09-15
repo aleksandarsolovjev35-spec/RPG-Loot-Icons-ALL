@@ -46,17 +46,17 @@ SOURCE_ENHANCE = dict(
     steer_taps=5,
     steer_rho=1.8,
     steer_range=0.026,
-    sharpen=0.40,
+    sharpen=0.32,
     sharpen_sigma=0.82,
     sharpen_thr=0.008,
     sharpen_knee=0.032,
-    sharpen_clamp=0.038,
-    laplacian=0.80,
+    sharpen_clamp=0.032,
+    laplacian=0.65,
     post_denoise=0.0,
     native_u8=True,
 )
-DETAIL = dict(amount=0.52, fine=0.06, coarse=0.06, s1=0.65, s2=1.7, s3=4.5)
-FINAL_SHARPEN = dict(sigma=0.72, amount=0.45, thr=0.006, knee=0.028, clamp=0.035)
+DETAIL = dict(amount=0.32, fine=0.04, coarse=0.04, s1=0.70, s2=1.8, s3=4.8)
+FINAL_SHARPEN = dict(sigma=0.80, amount=0.28, thr=0.008, knee=0.032, clamp=0.025)
 
 _WORK_FN = None
 

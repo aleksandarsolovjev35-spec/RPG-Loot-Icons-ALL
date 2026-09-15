@@ -12,7 +12,7 @@
 | `cut_icons/` | промежуточное | 4100 палитровых PNG, вырезанных из листов | 4100 файлов |
 | `icons-256-base/` | **база** | чистый набор 256×256 (enhance + Laplacian), **без стиля** — источник для стилизации | 44.7 МБ |
 | **`icons-256/`** | **актуальный** | база + `quiet+vign`: 4100 WebP 256×256 | **39.1 МБ** |
-| `icons-256-v2/` | кандидат | source-first: полноцветный кроп JPG → anti-ringing 256 → `quiet+flat+vign+fit+punch` → восстановление среднечастотных деталей | 50.6 МБ |
+| `icons-256-v2/` | кандидат | source-first: полноцветный кроп JPG → anti-ringing 256 → `quiet+flat+vign+fit+punch` → мягкое восстановление среднечастотных деталей | 47.2 МБ |
 | `icons-512/` | предыдущий | 512×512, полный рост (до решения про 256) | 83.3 МБ |
 
 `role` каждой папки записан в её `manifest.json` (`base` / `actual` / `candidate` /
@@ -118,7 +118,7 @@ tools/build_set.sh verify          # всё сразу
 ```
 icons-256-base  role=base      4100 files  44.7 MB  md5 4100/4100  problems: none
 icons-256       role=actual    4100 files  39.1 MB  md5 4100/4100  problems: none
-icons-256-v2    role=candidate 4100 files  50.6 MB  md5 4100/4100  problems: none
+icons-256-v2    role=candidate 4100 files  47.2 MB  md5 4100/4100  problems: none
 icons-512        role=previous  4100 files  83.3 MB  md5 skipped (4101-й файл — манифест)
 ```
 
@@ -152,9 +152,11 @@ PYTHONPATH=. .venv/bin/python tools/rebuild_v2_source_first.py \
 Под них в `stylize.py` добавлены три пресета-правки — `fit` (автоуровни и
 насыщенность к медианам набора), `flat` (добить подложку), `punch` (деталь на
 64 px). Эти правки сохранены в текущем source-first кандидате. На новом полном
-наборе контрольный аудит даёт: `dull-wash` 80 против 168, `dark` 17 против 38,
-деталь на 64 px 10.18 против 9.05; при этом `verify_set.py` и `qa_icons.py`
-возвращают `problems: none`. Подробное сравнение — **`docs/quality-lab/README.md`**.
+наборе контрольный аудит даёт: `dull-wash` 112 против 168, `dark` 24 против 38,
+деталь на 64 px 9.69 против 9.05, а `clipped` 26 против 27; при этом
+`verify_set.py` и `qa_icons.py` возвращают `problems: none`. Дополнительное
+ослабление финального sharpen сделано специально, чтобы тонкие места не стали
+«острыми». Подробное сравнение — **`docs/quality-lab/README.md`**.
 `icons-256/` не тронут: `icons-256-v2/` остаётся кандидатом для просмотра и
 отката.
 
