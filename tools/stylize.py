@@ -40,6 +40,16 @@ adding "art":
              art direction, shown for scale).
     loot     Loot-стиль - grade + rim + glow on top of each other.
 
+Three presets fix set-level defects instead of adding a look - they are what
+`tools/audit_set.py` found in the finished set (spread over 4100 icons):
+
+    fit      Выравнивание - per-icon levels + saturation towards the set medians;
+             fixes icons that are too dark, too bright or too grey next to the rest.
+    flat     Ровная подложка - `quiet` with a strength that follows the measured
+             backdrop, for the icons whose aura it did not reach.
+    punch    Читаемость 64 px - local contrast on the icons that lose their facets
+             at the size a VTT shows them.
+
 All numbers in the lab output are measured on the canon `icons-256` set, so the
 comparison is against the size the icons are actually shown at.
 """
@@ -65,6 +75,11 @@ SHEET_FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
 SHEET_FONT_BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
 
 TONE_QUIET = (0.010, 0.013, 0.022)      # flat dark backdrop the styles pull to
+
+# How the actual set looks today: medians over 586 sample icons of `icons-256`,
+# measured on the item pixels only (see docs/quality-lab).  `fit` pulls each icon
+# towards these, so the median icon does not move and only the odd ones do.
+FIT_TARGET = dict(black=0.133, white=0.910, chroma=0.174, contrast=0.212)
 
 
 # --------------------------------------------------------------------------
@@ -222,6 +237,93 @@ def vign(x, ctx, amount=0.45, inner=0.50, power=1.6):
     return np.clip(x * m[..., None], 0.0, 1.0)
 
 
+def _backdrop(L):
+    """Median luma of the 8 px border ring - what the sheet drew behind the item."""
+    return float(np.median(np.concatenate(
+        [L[:8].ravel(), L[-8:].ravel(), L[:, :8].ravel(), L[:, -8:].ravel()])))
+
+
+def _subject(L, bg, thr=0.12):
+    """Item mask: brighter than the backdrop, isolated specks removed."""
+    m = (L > max(bg + 0.05, thr)).astype(np.float32)
+    return (I.box(m, 3) > 0.35) & (m > 0.5)
+
+
+def fit(x, ctx, strength=0.70, cstrength=0.60, lo=2.0, hi=98.0,
+        black=FIT_TARGET['black'], white=FIT_TARGET['white'],
+        chroma=FIT_TARGET['chroma'], gmax=1.75):
+    """Levels + saturation pulled towards what the rest of the set looks like.
+
+    Every sheet was drawn separately, so the exposure and the saturation walk all
+    over the place (item luma 72..211 of 255, chroma 2..206).  This is a per-icon
+    auto-level with the black/white points taken from the *set* medians, so the
+    median icon does not move at all and only the odd ones are pulled in.  The
+    gain is clamped (0.60..1.75x) and the whole change is faded out outside the
+    item, so the backdrop stays black and a deliberately dark item stays dark.
+    """
+    L = I.luma(x)
+    m = _subject(L, _backdrop(L))
+    if m.sum() < 200:
+        return x
+    w = I.blur(m.astype(np.float32), 4.0)
+    s = L[m]
+    a, b = float(np.percentile(s, lo)), float(np.percentile(s, hi))
+    if b - a < 0.05:
+        return x
+    g = float(np.clip((white - black) / (b - a), 0.60, gmax))
+    L2 = np.clip(black + (L - a) * g, 0.0, 1.0)
+    Lf = L + strength * w * (L2 - L)
+    dev = x - L[..., None]                       # chroma, kept as it was
+    cm = float(np.abs(dev).max(-1)[m].mean())
+    if cm > 0.02:
+        k = float(np.clip(chroma / cm, 0.55, 1.60))
+        dev = dev * (1.0 + cstrength * w * (k - 1.0))[..., None]
+    return np.clip(Lf[..., None] + dev, 0.0, 1.0)
+
+
+def flat(x, ctx, knee=0.20, amount_min=0.25, amount_max=0.92, gate=0.30,
+         tone=TONE_QUIET, spread=6.0):
+    """Finish the backdrop on the few icons `quiet` did not reach.
+
+    `quiet` pulls with a fixed strength, so the icons that come with a bright
+    aura behind the item (backdrop up to 84/255) keep it.  Here the strength
+    follows the measured backdrop: a black one is left alone, a bright one is
+    pushed almost all the way to the flat tone.  Icons whose item fills the frame
+    (`touch > gate`) are skipped - there is no backdrop to fix, only artwork.
+    """
+    L = I.luma(x)
+    bg = _backdrop(L)
+    m = _subject(L, bg, 0.20)
+    touch = float(m[:8].mean() + m[-8:].mean() + m[:, :8].mean() + m[:, -8:].mean()) / 4.0
+    if touch > gate:
+        return x
+    excess = float(np.clip((bg - 0.012) / 0.10, 0.0, 1.0))
+    amount = amount_min + (amount_max - amount_min) * excess
+    k = knee + 0.20 * excess
+    w = I.blur(1.0 - I.soft(L, 0.04, k), spread)
+    tgt = np.array(tone, np.float32)
+    return np.clip(x * (1.0 - amount * w)[..., None] + tgt * (amount * w)[..., None], 0.0, 1.0)
+
+
+def punch(x, ctx, amount=0.60, sigma=2.0, target=0.18, knee=0.10):
+    """Local contrast where the icon turns to mush at the size a VTT shows it.
+
+    Measured per icon: detail energy left at 64 px divided by the contrast there
+    (`micro`).  Icons under ~0.18 lose their facets and read as a blob in a loot
+    grid, so they get a soft-threshold unsharp whose amount follows how far they
+    are from the target; crisp icons are not touched at all.
+    """
+    L = I.luma(x)
+    L64 = np.asarray(Image.fromarray(I.to_u8(L)).resize((64, 64), Image.LANCZOS), np.float32) / 255.0
+    micro = float(np.abs(L64 - I.box(L64, 1)).mean()) / (float(L64.std()) + 1e-6)
+    k = float(np.clip((target - micro) / knee, 0.0, 1.0))
+    if k < 0.05:
+        return x
+    w = I.blur(_subject(L, _backdrop(L)).astype(np.float32), 3.0)
+    y = I.masked_unsharp(x, sigma=sigma, amount=amount * k, thr=0.006, knee=0.03, clamp=0.06)
+    return np.clip(x + w[..., None] * (y - x), 0.0, 1.0)
+
+
 def warm(x, ctx):
     """Torchlight: warm highlights, brown shadows."""
     return grade(x, ctx, contrast=0.50, sat=1.10, vibrance=0.60,
@@ -273,6 +375,9 @@ PRESETS = OrderedDict([
     ('paint',   ('Живопись (Kuwahara)',  paint)),
     ('quiet',   ('Тихий фон',            quiet)),
     ('vign',    ('Виньетка',             vign)),
+    ('fit',     ('Выравнивание по набору', fit)),
+    ('flat',    ('Ровная подложка',      flat)),
+    ('punch',   ('Читаемость 64 px',     punch)),
     ('warm',    ('Тёплый свет',          warm)),
     ('cold',    ('Ночной холод',         cold)),
     ('palette', ('Палитра 48',           palette)),
@@ -287,6 +392,10 @@ RECIPES = OrderedDict([
     ('grade+rim', 'deliberate light + a lit edge, no bloom'),
     ('grade+quiet+rim', 'loot without the halo (no raised background)'),
     ('cel+ink', 'banded tones plus drawn contours - the most "illustrated" pair'),
+    ('quiet+vign+fit', 'the actual set plus exposure/saturation matching - the whole '
+                       'set reads as one render instead of 4100 separate drawings'),
+    ('quiet+flat+vign+fit+punch', '"one render" plus the two outlier fixes: a flat '
+                                  'backdrop everywhere and detail back on the mushy icons'),
 ])
 
 
@@ -730,13 +839,24 @@ def run_apply(args):
     m2['count'] = len(out_icons)
     m2['total_bytes'] = sum(e['bytes'] for e in out_icons)
     # the styled set was produced now; the base's timestamp stays in base_pipeline
+    now = time.strftime('%Y-%m-%dT%H:%M:%S%z')
     base_generated = m2.get('generated')
-    m2['generated'] = m2['style']['generated']
+    # re-styling an already styled set (icons-256 -> ...) keeps its old timestamp,
+    # styling the clean base (the canonical run) has none, so it is `now`
+    m2['generated'] = m2.get('style', {}).get('generated') or now
     if base_generated and 'base_pipeline' in m2:
         m2['base_pipeline']['generated'] = base_generated
     m2['style'] = {'presets': [n.strip() for n in spec.split('+') if n.strip()],
                    'title': title, 'source_set': args.set, 'hue_deg': args.hue_deg,
-                   'generated': time.strftime('%Y-%m-%dT%H:%M:%S%z')}
+                   'generated': now}
+    # a styled set is *derived*: record where it came from, and mark the one the
+    # game actually uses so the sets cannot be confused (see verify_set.py)
+    src_name = os.path.basename(os.path.normpath(args.set))
+    m2['derived_from'] = src_name
+    m2['derived_from_manifest'] = '%s/manifest.json' % src_name
+    m2['role'] = args.role or ('actual'
+                               if os.path.basename(os.path.normpath(args.out_dir)) == 'icons-256'
+                               else m2.get('role'))
     json.dump(m2, open(os.path.join(out_root, 'manifest.json'), 'w'), indent=1)
     print('wrote %d icons to %s (%.1f MB, %.0fs)'
           % (len(out_icons), os.path.relpath(out_root, ROOT), m2['total_bytes'] / 1e6,
@@ -780,6 +900,9 @@ def main(argv=None):
                          'is icons-256, e.g. --apply quiet+vign --out-dir icons-256)')
     ap.add_argument('--limit', type=int, default=0, help='stop after N icons (--apply)')
     ap.add_argument('--jobs', type=int, default=0, help='0 = cpu count (--apply)')
+    ap.add_argument('--role', default=None,
+                    help="role written to the new manifest (base/actual/previous); "
+                         "default: 'actual' when baking into icons-256, else the source's")
     args = ap.parse_args(argv)
     args.presets = [p.strip() for p in args.presets.split(',') if p.strip()]
     if args.compare:

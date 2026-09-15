@@ -9,7 +9,8 @@
 #   tools/build_set.sh actual         # base + quiet+vign -> icons-256/   (the actual set)
 #   tools/build_set.sh 512            # -> icons-512/               (previous full-growth set)
 #   tools/build_set.sh verify         # qa + manifest/md5 verification of both 256 sets
-#   tools/build_set.sh all            # cut -> base -> actual -> verify
+#   tools/build_set.sh audit          # consistency audit of the actual set (spread + outliers)
+#   tools/build_set.sh all            # cut -> base -> actual -> verify -> audit
 #
 # Options:
 #   JOBS=2                 parallel encoder processes for repack/stylize
@@ -75,13 +76,19 @@ print('  ok')
 EOF
 }
 
+step_audit() {
+  echo "== audit: how consistent the actual set is (see docs/quality-lab/) =="
+  "$PY" tools/audit_set.py --set icons-256 --dupes
+}
+
 case "${1:-all}" in
   cut)    step_cut ;;
   base)   step_base ;;
   actual) step_actual ;;
   512)    step_512 ;;
   verify) step_verify ;;
-  all)    step_cut; step_base; step_actual; step_verify ;;
+  audit)  step_audit ;;
+  all)    step_cut; step_base; step_actual; step_verify; step_audit ;;
   *)      sed -n '2,20p' "$0"; exit 2 ;;
 esac
 echo "done: $1"
