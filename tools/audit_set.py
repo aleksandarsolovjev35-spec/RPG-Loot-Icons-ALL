@@ -186,10 +186,38 @@ def _count(rows, kind):
     return out
 
 
-def find_dupes(rows, max_dist=4):
+def pair_distance(root, a, b):
+    """Is this pair the same art?  (mean |delta| in 255ths, 32 px correlation)."""
+    xa = np.asarray(Image.open(os.path.join(root, a)).convert('RGB'), np.float32)
+    xb = np.asarray(Image.open(os.path.join(root, b)).convert('RGB'), np.float32)
+    mean = float(np.abs(xa - xb).mean())
+    la = np.asarray(Image.open(os.path.join(root, a)).convert('L').resize((32, 32), Image.LANCZOS), np.float32)
+    lb = np.asarray(Image.open(os.path.join(root, b)).convert('L').resize((32, 32), Image.LANCZOS), np.float32)
+    corr = float(np.corrcoef(la.ravel(), lb.ravel())[0, 1])
+    return mean, corr
+
+
+def find_dupes(rows, root, hash_dist=5, max_delta=10.0, min_corr=0.97):
+    """Perceptual duplicates, in two stages.
+
+    Stage one is a 64-bit dHash over all icons - cheap, but on its own useless
+    here: 4100 items contain hundreds of swords with the same silhouette, and the
+    pair count grows x2 per unit of hash distance with no knee anywhere.  So every
+    candidate pair (distance <= 5, ~160 pairs on this set) is then *verified by
+    pixels*: same art means a mean difference under 10/255 and a 32 px correlation
+    above 0.97.  On `icons-256` that leaves exactly one pair out of 55 hash
+    candidates - look-alikes such as two different swords score 18..67.
+    """
     h = np.array([r['hash'] for r in rows], np.uint64)
     files = [r['file'] for r in rows]
     n = len(h)
+    cand = []
+    for i in range(0, n, 512):
+        d = np.bitwise_count(h[i:i + 512, None] ^ h[None, :])
+        xs, ys = np.nonzero((d <= hash_dist)
+                            & (np.arange(n)[None, :] > (i + np.arange(len(d)))[:, None]))
+        cand.extend((i + int(x), int(y)) for x, y in zip(xs.tolist(), ys.tolist()))
+
     parent = list(range(n))
 
     def find(x):
@@ -198,22 +226,19 @@ def find_dupes(rows, max_dist=4):
             x = parent[x]
         return x
 
-    step = 512
-    for i in range(0, n, step):
-        blk = h[i:i + step]
-        d = np.bitwise_count(blk[:, None] ^ h[None, :])
-        xs, ys = np.nonzero(d <= max_dist)
-        for x, y in zip(xs.tolist(), ys.tolist()):
-            a, b = i + x, y
-            if a >= b:
-                continue
+    kept = []
+    for a, b in cand:
+        mean, corr = pair_distance(root, files[a], files[b])
+        if mean < max_delta and corr > min_corr:
+            kept.append((files[a], files[b], mean, corr))
             ra, rb = find(a), find(b)
             if ra != rb:
                 parent[rb] = ra
     groups = defaultdict(list)
     for i in range(n):
         groups[find(i)].append(i)
-    return [[files[i] for i in g] for g in groups.values() if len(g) > 1]
+    out = [[files[i] for i in g] for g in groups.values() if len(g) > 1]
+    return out, kept
 
 
 def montage(root, files, path, cols=8, cell=110, title='', cap=32):
@@ -279,13 +304,17 @@ def main(argv=None):
             ('hf64', 'деталь на 64 px', ''), ('micro', 'микроконтраст 64 px', '')]
     table = [spread([r[k] for r in rows], label) for k, label, _u in keys]
     outliers = find_outliers(rows)
-    dupes = find_dupes(rows) if args.dupes else None
+    dupes = None
+    if args.dupes:
+        dupes, dupe_pairs = find_dupes(rows, src)
 
     report = {'set': args.set, 'count': len(rows), 'spread': table,
               'outliers': {k: len(v) for k, v in outliers.items()}}
     if dupes is not None:
         report['dupe_groups'] = len(dupes)
         report['dupe_files'] = sum(len(g) for g in dupes)
+        report['dupe_pairs'] = [{'a': a, 'b': b, 'mean': round(m, 2), 'corr': round(c, 4)}
+                                for a, b, m, c in dupe_pairs]
 
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
@@ -300,6 +329,8 @@ def main(argv=None):
             print('%-11s %5d иконок' % (k, len(v)))
         if dupes is not None:
             print('dupes       %5d групп (%d файлов)' % (len(dupes), sum(len(g) for g in dupes)))
+            for a, b, m, c in dupe_pairs:
+                print('   Δ %.1f  corr %.3f  %s  ==  %s' % (m, c, a, b))
 
     if args.sheets:
         for k, v in outliers.items():
@@ -364,14 +395,18 @@ def main(argv=None):
             'blank': 'в кадре почти ничего нет',
             'clipped': 'предмет упирается в рамку (или в кадр попал сосед)',
             'dull-wash': 'на 64 px превращается в кашу: нет микроконтраста',
-            'dark': 'темнее набора на 2.5+ MAD — читается как другой рендер',
-            'bright': 'светлее набора на 2.5+ MAD',
-            'dupes': 'одинаковый арт (перцептивный хеш, расстояние ≤ 4 из 64)',
+            'dark': 'предмет темнее %g/255 (p05 актуального набора)' % LIMITS['dark'],
+            'bright': 'предмет светлее %g/255 (p95 актуального набора)' % LIMITS['bright'],
+            'dupes': 'одинаковый арт: кандидат по хешу (≤ 5 из 64), подтверждённый '
+                     'пиксельно (Δ < 10/255, корреляция > 0.97)',
         }
         for k, v in outliers.items():
             lines.append('| `%s` | %d | %s |' % (k, len(v), why.get(k, '')))
         if dupes is not None:
             lines.append('| `dupes` | %d групп / %d файлов | %s |' % (len(dupes), sum(len(g) for g in dupes), why['dupes']))
+            for a, b, m, c in dupe_pairs:
+                lines.append('')
+                lines.append('  * `%s` == `%s` (Δ %.1f, корреляция %.3f)' % (a, b, m, c))
         os.makedirs(os.path.dirname(args.md) or '.', exist_ok=True)
         open(args.md, 'w').write('\n'.join(lines) + '\n')
         if not args.json:
