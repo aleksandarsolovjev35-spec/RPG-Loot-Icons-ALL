@@ -44,34 +44,35 @@ DEFAULTS = [
     ("cacao", "RPG Loot Icons 30/part2/icon_028.webp"),
 ]
 
-# One clean source -> 256 px pass.  Less denoise than the old WebP pass keeps
-# brush texture; the anti-ringing clamp and guided contour work stay enabled.
+# The demo uses the same conservative clean profile as the production v2 set:
+# guided denoise, anti-ringing resize, restrained edge-safe detail, and no
+# second aggressive sharpening pass.
 SOURCE_ENHANCE = dict(
     size=256,
-    denoise=0.009,
+    denoise=0.014,
     denoise_r=1,
     black=0.010,
     kernel="lanczos3",
     clamp=True,
     stretch=False,
-    steer=1.2,
+    steer=0.95,
     steer_taps=5,
     steer_rho=1.8,
-    steer_range=0.026,
-    sharpen=0.32,
-    sharpen_sigma=0.82,
-    sharpen_thr=0.008,
+    steer_range=0.024,
+    sharpen=0.16,
+    sharpen_sigma=0.80,
+    sharpen_thr=0.010,
     sharpen_knee=0.032,
-    sharpen_clamp=0.032,
-    laplacian=0.65,
+    sharpen_clamp=0.016,
+    laplacian=0.28,
     post_denoise=0.0,
     native_u8=True,
 )
 
-# A second, small mid-band pass restores facets and fine painted edges without
-# turning the silhouette into a bright pencil outline.
-DETAIL = dict(amount=0.32, fine=0.04, coarse=0.04, s1=0.70, s2=1.8, s3=4.8)
-FINAL_SHARPEN = dict(sigma=0.80, amount=0.28, thr=0.008, knee=0.032, clamp=0.025)
+# A small mid-band pass restores facets and fine painted edges without turning
+# the silhouette into a bright pencil outline.
+DETAIL = dict(amount=0.18, fine=0.02, coarse=0.02, s1=0.70, s2=1.8, s3=4.8)
+FINAL_SHARPEN = dict(sigma=0.80, amount=0.12, thr=0.010, knee=0.035, clamp=0.012)
 STYLE_RECIPE = "quiet+flat+vign+fit+punch"
 
 

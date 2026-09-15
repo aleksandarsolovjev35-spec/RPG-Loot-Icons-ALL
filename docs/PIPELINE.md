@@ -12,7 +12,7 @@
 | `cut_icons/` | промежуточное | 4100 палитровых PNG, вырезанных из листов | 4100 файлов |
 | `icons-256-base/` | **база** | чистый набор 256×256 (enhance + Laplacian), **без стиля** — источник для стилизации | 44.7 МБ |
 | **`icons-256/`** | **актуальный** | база + `quiet+vign`: 4100 WebP 256×256 | **39.1 МБ** |
-| `icons-256-v2/` | кандидат | source-first: полноцветный кроп JPG → anti-ringing 256 → `quiet+flat+vign+fit+punch` → мягкое восстановление среднечастотных деталей | 47.2 МБ |
+| `icons-256-v2/` | кандидат | **clean source-first**: полноцветный кроп JPG → guided denoise → anti-ringing 256 → restrained edge-safe detail → `quiet+flat+vign+fit+punch` → **lossless WebP** | **76.7 МБ** |
 | `icons-512/` | предыдущий | 512×512, полный рост (до решения про 256) | 83.3 МБ |
 
 `role` каждой папки записан в её `manifest.json` (`base` / `actual` / `candidate` /
@@ -118,25 +118,33 @@ tools/build_set.sh verify          # всё сразу
 ```
 icons-256-base  role=base      4100 files  44.7 MB  md5 4100/4100  problems: none
 icons-256       role=actual    4100 files  39.1 MB  md5 4100/4100  problems: none
-icons-256-v2    role=candidate 4100 files  47.2 MB  md5 4100/4100  problems: none
+icons-256-v2    role=candidate 4100 files  76.7 MB  lossless WebP  md5 4100/4100  problems: none
 icons-512        role=previous  4100 files  83.3 MB  md5 skipped (4101-й файл — манифест)
 ```
 
-### Source-first merge в `icons-256-v2`
+### Clean source-first merge в `icons-256-v2`
 
-Кандидат `icons-256-v2` теперь пересобран прямо в своей папке из полноцветных
-исходных JPG, а не из уже закодированного промежуточного WebP. Для каждого кропа
-применяется anti-ringing Lanczos до 256 px, затем сохраняется прежний стиль
-`quiet+flat+vign+fit+punch`, добавляются среднечастотные детали и выполняется один
-финальный WebP q92. Это повышает читаемость тонких линий и фактуры; актуальный
+Кандидат `icons-256-v2` пересобран прямо из полноцветных исходных JPG, а не из
+уже закодированного промежуточного WebP. Для каждого кропа выполняется один
+консервативный проход: guided denoise → чёрный floor → anti-ringing Lanczos до
+256 px → steered blur против лестницы → ограниченный edge-safe sharpen и
+среднечастотная деталь. Затем сохраняется `quiet+flat+vign+fit+punch` и делается
+**одна lossless-кодировка WebP**. Поэтому в финальном наборе нет добавленной
+ошибки q92/q100: остаются только артефакты исходного JPG, которые убирает
+source-first очистка. Силуэт, композиция и геометрия не меняются; актуальный
 набор `icons-256/` намеренно не затрагивается.
+
+Профиль `clean` — новый профиль по умолчанию. Агрессивный прежний source-first
+вариант оставлен для A/B как `--profile detailed`; это полезно для сравнения,
+но не является финальным clean-набором.
 
 Воспроизводимая команда для временной папки:
 
 ```bash
 PYTHONPATH=. .venv/bin/python tools/rebuild_v2_source_first.py \
-  --out .cache/icons-256-v2-source-first --jobs 4
-.venv/bin/python tools/verify_set.py .cache/icons-256-v2-source-first
+  --profile clean --lossless --out .cache/icons-256-v2-clean-lossless --jobs 4
+.venv/bin/python tools/verify_set.py .cache/icons-256-v2-clean-lossless
+.venv/bin/python tools/qa_icons.py .cache/icons-256-v2-clean-lossless webp
 ```
 
 После проверки временный кандидат можно синхронизировать в `icons-256-v2/`.
@@ -151,12 +159,14 @@ PYTHONPATH=. .venv/bin/python tools/rebuild_v2_source_first.py \
 
 Под них в `stylize.py` добавлены три пресета-правки — `fit` (автоуровни и
 насыщенность к медианам набора), `flat` (добить подложку), `punch` (деталь на
-64 px). Эти правки сохранены в текущем source-first кандидате. На новом полном
-наборе контрольный аудит даёт: `dull-wash` 112 против 168, `dark` 24 против 38,
-деталь на 64 px 9.69 против 9.05, а `clipped` 26 против 27; при этом
-`verify_set.py` и `qa_icons.py` возвращают `problems: none`. Дополнительное
-ослабление финального sharpen сделано специально, чтобы тонкие места не стали
-«острыми». Подробное сравнение — **`docs/quality-lab/README.md`**.
+64 px). Они сохранены в текущем source-first кандидате, но сам source-first
+проход теперь мягче: denoise `0.014`, steer `0.95`, sharpen `0.16`, Laplacian
+`0.28`, финальный sharpen `0.12`. Контрольный аудит нового полного набора даёт:
+`bright-bg` 37, `dull-wash` 200, `dark` 29, `bright` 123, `clipped` 27;
+разброс экспозиции 15.77, светов 13.53, контраста 5.42, насыщенности 21.28.
+При этом lossless WebP убирает добавленную ошибку кодека, а `verify_set.py` и
+`qa_icons.py` возвращают `problems: none`. Подробное сравнение —
+**`docs/quality-lab/README.md`**.
 `icons-256/` не тронут: `icons-256-v2/` остаётся кандидатом для просмотра и
 отката.
 
