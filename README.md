@@ -318,9 +318,10 @@ enhance занимает на 6 % меньше, чем старый q90 без �
 мыльных на 64 px, обрезанных рамкой, повторов арта.
 
 ```bash
-.venv/bin/python tools/audit_set.py --set icons-256 --dupes     # сводка + выбросы
+tools/build_set.sh audit                                        # сводка + выбросы
+.venv/bin/python tools/audit_set.py --set icons-256-v2 --dupes  # то же по кандидату
 .venv/bin/python tools/audit_set.py --set icons-256 --sheets docs/quality-lab --out out.json
-.venv/bin/python tools/audit_set.py --set <новый набор> --compare rows_actual.csv   # до/после
+.venv/bin/python tools/audit_set.py --set icons-256-v2 --compare rows_actual.csv  # до/после
 ```
 
 Под него добавлены три пресета-правки (не стили): `fit` — per-icon автоуровни и
@@ -328,8 +329,9 @@ enhance занимает на 6 % меньше, чем старый q90 без �
 `quiet`, `punch` — вернуть деталь иконкам, мыльным на 64 px. Вместе: разброс
 насыщенности −41 %, контраста −34 %, светов −45 %, выбросов вдвое меньше при
 изменении арта на 5.5 уровня из 255. Разбор, таблицы и листы «до/после» —
-**`docs/quality-lab/`**; выпекается так же, как стиль:
-`--apply quiet+flat+vign+fit+punch --out-dir icons-256`.
+**`docs/quality-lab/`**. Кандидат уже испечён отдельной папкой
+**`icons-256-v2/`** (`role: candidate`, `problems: none`) — `icons-256/` при этом не
+тронут; переключить: `--apply quiet+flat+vign+fit+punch --out-dir icons-256`.
 
 ## Запуск
 

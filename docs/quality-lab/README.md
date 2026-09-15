@@ -30,7 +30,7 @@
 .venv/bin/python tools/audit_set.py --set icons-256 --dupes          # сводка
 .venv/bin/python tools/audit_set.py --set icons-256 --md docs/quality-lab/audit.md \
     --sheets docs/quality-lab --out .cache/outliers.json --rows .cache/rows_actual.csv
-.venv/bin/python tools/audit_set.py --set .cache/candidate --compare .cache/rows_actual.csv
+.venv/bin/python tools/audit_set.py --set icons-256-v2 --compare .cache/rows_actual.csv
 ```
 
 4100 иконок, 2 процесса, ~30 с. Метрики (все по пикселям предмета, если не сказано
@@ -120,9 +120,8 @@
 
 ## Проверка на всём наборе
 
-Кандидат выпечен по всем 4100 иконкам
-(`stylize.py --set icons-256-base --apply quiet+flat+vign+fit+punch`, 135 с на двух
-ядрах), `verify_set.py` → `problems: none`.
+Кандидат выпечен по всем 4100 иконкам в **`icons-256-v2/`** (`role: candidate`,
+135 с на двух ядрах), `verify_set.py` и `qa_icons.py` → `problems: none`.
 
 | метрика | std было | std стало | Δ std | сред было | сред стало | Δ сред |
 |---|---|---|---|---|---|---|
@@ -160,8 +159,11 @@
 
 ## Листы
 
-* `grid-compare.png` — **главный лист**: сетка лута 14×2, сверху сейчас, снизу
-  кандидат. Решение принимать по нему: видно не одну иконку, а набор.
+* `compare-actual-v2.png` — **главный лист**: 28 иконок, слева `icons-256/`,
+  справа `icons-256-v2/` (средняя |разница| 5.5 уровня). Решение принимать по
+  нему: видно не одну иконку, а набор.
+* `grid-compare.png` — то же как сетка лута 14×2: верхний ряд сейчас, нижний
+  кандидат.
 * `fit-before-after.png` — крайние иконки (тёмные, светлые, с яркой подложкой,
   мыльные) 1:1 до/после.
 * `flat-before-after.png` — 12 иконок с нечёрной подложкой до/после.
@@ -189,23 +191,28 @@
   иконка нарисована в двух паках). Отдельная задача, `audit_set.py --out` выдаёт
   списки файлов.
 
-## Как применить
+## Как это испечь и как переключить
 
 ```bash
-# прикидка на 300 иконок, ничего не перезаписывая
+# 1. прикидка: 300 иконок, ничего не перезаписывая
 .venv/bin/python tools/stylize.py --set icons-256-base --apply quiet+flat+vign+fit+punch \
     --out-dir /tmp/probe --limit 300
 
-# выпечь в актуальный набор (база не трогается, откат — одной командой)
+# 2. выпечь отдельной папкой-кандидатом (так и сделано: icons-256-v2/)
+.venv/bin/python tools/stylize.py --set icons-256-base --apply quiet+flat+vign+fit+punch \
+    --out-dir icons-256-v2 --role candidate --jobs 2
+.venv/bin/python tools/verify_set.py icons-256-v2
+.venv/bin/python tools/audit_set.py --set icons-256-v2 --compare .cache/rows_actual.csv
+
+# 3. лист «до/после» между двумя готовыми наборами
+.venv/bin/python tools/stylize.py --compare icons-256,icons-256-v2 \
+    --out docs/quality-lab --compare-out docs/quality-lab/compare-actual-v2.png
+
+# 4. сделать кандидат актуальным (база и icons-256-v2 не трогаются,
+#    откат — перевыпечкой прежнего стиля в icons-256)
 .venv/bin/python tools/stylize.py --set icons-256-base --apply quiet+flat+vign+fit+punch \
     --out-dir icons-256 --jobs 2
-
-# откат: перевыпечь прежний стиль
-.venv/bin/python tools/stylize.py --set icons-256-base --apply quiet+vign --out-dir icons-256
-
-# проверка и сравнение с тем, что было
-.venv/bin/python tools/verify_set.py icons-256
-.venv/bin/python tools/audit_set.py --set icons-256 --compare .cache/rows_actual.csv
+.venv/bin/python tools/build_set.sh verify
 ```
 
 Порядок пресетов в цепочке важен: `quiet` → `flat` добивает подложку → `vign`
