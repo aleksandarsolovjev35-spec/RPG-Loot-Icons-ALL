@@ -15,9 +15,12 @@
 Актуальный игровой набор — **`icons-256/`**: 4100 WebP 256×256 (q92, 39.1 МБ) —
 чистый набор плюс стиль `quiet+vign`. 256 — честный апскейл ×1.73 от кропа, без
 мыла 512. Чистая база без стиля лежит рядом в **`icons-256-base/`** (44.7 МБ):
-это она собирается `repack_icons.py` и она же служит источником для стилизации;
-`icons-512/` остаётся как предыдущий полный рост. Роли наборов записаны в их
-`manifest.json` (`role`: `actual` / `base` / `previous`), проверка —
+это она собирается `repack_icons.py` и она же служит источником для стилизации.
+Отдельный кандидат максимального качества — **`icons-256-v2/`**: 4100 иконок
+256×256, source-first denoise/anti-ringing, мягкое edge-safe улучшение и
+**lossless WebP** (76.7 МБ), без повторного lossy-сжатия. `icons-512/` остаётся
+как предыдущий полный рост. Роли наборов записаны в их `manifest.json`
+(`role`: `actual` / `base` / `candidate` / `previous`), проверка —
 `tools/verify_set.py`, вся последовательность сборки — `docs/PIPELINE.md`.
 
 ## Универсальный алгоритм
@@ -249,6 +252,8 @@ enhance занимает на 6 % меньше, чем старый q90 без �
 * `icons-256-base/` — 4100 WebP 256×256 + `manifest.json` (44.7 МБ), чистая база
   (enhance + Laplacian) без стиля — источник для `tools/stylize.py`;
 * `icons-512/` — 4100 WebP 512×512 + `manifest.json` (83.3 МБ), предыдущий полный рост;
+* `icons-256-v2/` — 4100 WebP 256×256, **lossless**, source-first clean candidate
+  (76.7 МБ; `role: candidate`);
 * `icons-256-<стиль>/` — примерка любого другого пресета (30–50 МБ): в git стоит
   держать базу и один актуальный стиль, каждый следующий — ещё ~40 МБ к клону.
 
@@ -331,8 +336,9 @@ tools/build_set.sh audit                                        # сводка +
 насыщенности −41 %, контраста −34 %, светов −45 %, выбросов вдвое меньше при
 изменении арта на 5.5 уровня из 255. Разбор, таблицы и листы «до/после» —
 **`docs/quality-lab/`**. Кандидат уже испечён отдельной папкой
-**`icons-256-v2/`** (`role: candidate`, `problems: none`) — `icons-256/` при этом не
-тронут; переключить: `--apply quiet+flat+vign+fit+punch --out-dir icons-256`.
+**`icons-256-v2/`** (`role: candidate`, lossless WebP, `problems: none`) —
+`icons-256/` при этом не тронут; переключить стиль можно только осознанно:
+для чистого v2 используйте source-first команду из `docs/PIPELINE.md`.
 
 ## Запуск
 
@@ -347,6 +353,9 @@ python3 -m venv .venv
 .venv/bin/python tools/measure_quality.py --set icons-256-base   # таблица стадий enhance
 .venv/bin/python tools/stylize.py              # лаборатория стилей (листы + замеры)
 .venv/bin/python tools/verify_set.py icons-256 # контракт манифеста актуального набора
+PYTHONPATH=. .venv/bin/python tools/rebuild_v2_source_first.py \
+  --profile clean --lossless --out .cache/icons-256-v2-clean-lossless --jobs 4
+                                                       # v2: source-first 256, чисто и lossless
 tools/build_set.sh all                         # вся сборка: cut -> база -> стиль -> проверки
 ```
 

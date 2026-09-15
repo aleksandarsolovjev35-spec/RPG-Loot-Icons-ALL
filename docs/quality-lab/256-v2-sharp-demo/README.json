@@ -4,39 +4,39 @@
   "style_recipe": "quiet+flat+vign+fit+punch",
   "source_enhance": {
     "size": 256,
-    "denoise": 0.009,
+    "denoise": 0.014,
     "denoise_r": 1,
     "black": 0.01,
     "kernel": "lanczos3",
     "clamp": true,
     "stretch": false,
-    "steer": 1.2,
+    "steer": 0.95,
     "steer_taps": 5,
     "steer_rho": 1.8,
-    "steer_range": 0.026,
-    "sharpen": 0.32,
-    "sharpen_sigma": 0.82,
-    "sharpen_thr": 0.008,
+    "steer_range": 0.024,
+    "sharpen": 0.16,
+    "sharpen_sigma": 0.8,
+    "sharpen_thr": 0.01,
     "sharpen_knee": 0.032,
-    "sharpen_clamp": 0.032,
-    "laplacian": 0.65,
+    "sharpen_clamp": 0.016,
+    "laplacian": 0.28,
     "post_denoise": 0.0,
     "native_u8": true
   },
   "detail": {
-    "amount": 0.32,
-    "fine": 0.04,
-    "coarse": 0.04,
+    "amount": 0.18,
+    "fine": 0.02,
+    "coarse": 0.02,
     "s1": 0.7,
     "s2": 1.8,
     "s3": 4.8
   },
   "final_sharpen": {
     "sigma": 0.8,
-    "amount": 0.28,
-    "thr": 0.008,
-    "knee": 0.032,
-    "clamp": 0.025
+    "amount": 0.12,
+    "thr": 0.01,
+    "knee": 0.035,
+    "clamp": 0.012
   },
   "icons": [
     {
@@ -44,54 +44,54 @@
       "kind": "тонкие линии",
       "source": "icons-256-v2/RPG Loot Icons 20/part2/icon_036.webp",
       "output": "docs/quality-lab/256-v2-sharp-demo/rope-sharp.png",
-      "mean_delta": 0.8468475341796875,
-      "max_delta": 26,
-      "changed_px_percent": 22.320556640625
+      "mean_delta": 0.5297648111979166,
+      "max_delta": 20,
+      "changed_px_percent": 13.34381103515625
     },
     {
       "name": "bottle",
       "kind": "мягкие градиенты",
       "source": "icons-256-v2/RPG Loot Icons 26/part1/icon_048.webp",
       "output": "docs/quality-lab/256-v2-sharp-demo/bottle-sharp.png",
-      "mean_delta": 1.0721944173177083,
-      "max_delta": 33,
-      "changed_px_percent": 25.4852294921875
+      "mean_delta": 0.7535756429036459,
+      "max_delta": 23,
+      "changed_px_percent": 14.72015380859375
     },
     {
       "name": "scroll",
       "kind": "грани и орнамент",
       "source": "icons-256-v2/RPG Loot Icons 12/part2/icon_019.webp",
       "output": "docs/quality-lab/256-v2-sharp-demo/scroll-sharp.png",
-      "mean_delta": 1.8377126057942708,
-      "max_delta": 35,
-      "changed_px_percent": 43.65692138671875
+      "mean_delta": 1.2940266927083333,
+      "max_delta": 23,
+      "changed_px_percent": 30.059814453125
     },
     {
       "name": "bow",
       "kind": "тонкие линии",
       "source": "icons-256-v2/RPG Loot Icons 36/part2/icon_021.webp",
       "output": "docs/quality-lab/256-v2-sharp-demo/bow-sharp.png",
-      "mean_delta": 1.4302215576171875,
-      "max_delta": 27,
-      "changed_px_percent": 34.4573974609375
+      "mean_delta": 0.9740651448567709,
+      "max_delta": 26,
+      "changed_px_percent": 20.81451416015625
     },
     {
       "name": "chest",
       "kind": "крупные края",
       "source": "icons-256-v2/RPG Loot Icons 24/part1/icon_011.webp",
       "output": "docs/quality-lab/256-v2-sharp-demo/chest-sharp.png",
-      "mean_delta": 1.744720458984375,
-      "max_delta": 34,
-      "changed_px_percent": 46.02203369140625
+      "mean_delta": 1.1523335774739583,
+      "max_delta": 21,
+      "changed_px_percent": 27.83050537109375
     },
     {
       "name": "cacao",
       "kind": "мелкая фактура",
       "source": "icons-256-v2/RPG Loot Icons 30/part2/icon_028.webp",
       "output": "docs/quality-lab/256-v2-sharp-demo/cacao-sharp.png",
-      "mean_delta": 2.058802286783854,
-      "max_delta": 32,
-      "changed_px_percent": 52.79388427734375
+      "mean_delta": 1.4050649007161458,
+      "max_delta": 28,
+      "changed_px_percent": 32.71331787109375
     }
   ]
 }
