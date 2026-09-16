@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RPG Loot Icons — Foundry Viewer (DND5e 32–96px)</title>
+<style>
+  :root{--bg:#131318;--card:#1c1c22;--muted:#9aa0a8;--accent:#e6c278;--border:#2a2a33}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,'Helvetica Neue',Arial;color:#e8e8ee;background:var(--bg)}
+  header{position:sticky;top:0;z-index:5;background:rgba(19,19,24,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:12px 16px}
+  h1{margin:0;font-size:16px;letter-spacing:.02em}
+  h1 span{color:var(--accent)}
+  .sub{color:var(--muted);font-size:12px;margin-top:4px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;align-items:center}
+  .toolbar label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  select, input[type="text"], input[type="range"]{background:#23232b;border:1px solid var(--border);color:#e8e8ee;border-radius:8px;padding:6px 8px}
+  input[type="text"]{min-width:260px}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:#23232b;border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:12px}
+  .pill b{color:var(--accent)}
+  .grid{padding:16px;display:grid;gap:10px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+  .thumb{aspect-ratio:1;display:grid;place-items:center;background:radial-gradient(520px 320px at 50% 30%, #1f1f27 0%, #141418 62%, #0e0e12 100%);position:relative;overflow:hidden}
+  .thumb img{image-rendering:auto;display:block}
+  .meta{padding:8px 9px;border-top:1px solid var(--border)}
+  .meta .name{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#d8d8de}
+  .meta .small{font-size:10px;color:var(--muted)}
+  .badge{position:absolute;left:6px;top:6px;font-size:9px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.12);color:#eee;border-radius:999px;padding:2px 6px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .btn{appearance:none;border:1px solid var(--border);background:#23232b;color:#e8e8ee;border-radius:8px;padding:6px 9px;font-size:12px;cursor:pointer}
+  .btn:hover{border-color:#3a3a48}
+  .hint{padding:0 16px 12px;color:var(--muted);font-size:12px}
+  .hint a{color:var(--accent);text-decoration:none}
+  .hint a:hover{text-decoration:underline}
+  dialog{border:1px solid var(--border);background:#18181e;color:#eee;border-radius:14px;max-width:min(860px,94vw);padding:0;overflow:hidden}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  .dlg-head{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .dlg-body{padding:14px;display:grid;grid-template-columns:1fr 300px;gap:14px}
+  @media (max-width:780px){.dlg-body{grid-template-columns:1fr}}
+  .dlg-img{background:#0f0f13;border:1px solid var(--border);border-radius:10px;display:grid;place-items:center;padding:10px}
+  .kvs{font-size:12px;line-height:1.5}
+  .kvs b{color:var(--accent)}
+  code{font-size:11px;background:#23232b;border:1px solid var(--border);padding:2px 6px;border-radius:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>RPG Loot Icons — <span>Foundry DND5e Viewer</span> <span style="font-weight:400;color:#9aa0a8">4100 иконок · 256×256 WebP · quiet+vign</span></h1>
+  <div class="sub">Смотри как в игре: 32px инвентарь, 48px чат, 64px лист, 96px компендиум. Переключай набор и размер — всё масштабируется как в Foundry (LANCZOS даунскейл браузера ≈ Foundry).</div>
+  <div class="toolbar">
+    <label>Набор
+      <select id="set">
+        <option value="icons-256" selected>icons-256 — actual quiet+vign (39 МБ)</option>
+        <option value="icons-256-base">icons-256-base — чистый (44.7 МБ)</option>
+        <option value="icons-256-v2">icons-256-v2 — lossless + fit/flat/punch (76 МБ)</option>
+      </select>
+    </label>
+    <label>Размер в UI
+      <select id="size">
+        <option value="32">32px — список инвентаря</option>
+        <option value="48">48px — чат / хотбар</option>
+        <option value="64" selected>64px — лист предмета (дефолт)</option>
+        <option value="96">96px — грид компендиума</option>
+        <option value="128">128px — ретина 2×</option>
+        <option value="256">256px — 1:1</option>
+      </select>
+    </label>
+    <label>Колонок <input id="cols" type="range" min="4" max="14" value="8"></label>
+    <label>Поиск <input id="q" type="text" placeholder="напр. 01/part1, ring, potion, 010 — фильтр по пути"></label>
+    <span class="pill">Показано <b id="shown">—</b> / 4100</span>
+    <span class="pill">Клик по иконке — 1:1 + путь для Foundry</span>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <button class="btn" onclick="document.getElementById('size').value='32';render()">32</button>
+    <button class="btn" onclick="document.getElementById('size').value='48';render()">48</button>
+    <button class="btn" onclick="document.getElementById('size').value='64';render()">64</button>
+    <button class="btn" onclick="document.getElementById('size').value='96';render()">96</button>
+    <button class="btn" onclick="location.href='../docs/FOUNDRY_GUIDE.md'">Гид по разрешению →</button>
+    <button class="btn" onclick="location.href='../docs/quality-lab/foundry-render-sizes.png'">Скрин сравнения</button>
+  </div>
+</header>
+
+<div class="hint">
+  В Foundry путь иконки — <code>modules/rpg-loot-icons/icons/&lt;pack&gt;/partN/icon_NNN.webp</code>. В манифесте <code>icons-256/manifest.json</code> поле <code>file</code> — тот же путь. 
+  256→64 в браузере (CSS <code>image-rendering:auto</code>) визуально совпадает с Foundry (LANCZOS). 512 не нужен — смотри <a href="../docs/quality-lab/resolution-64px-compare.png">разницу 256 vs 512 на 64px</a>.
+</div>
+
+<div id="grid" class="grid"></div>
+
+<dialog id="dlg">
+  <div class="dlg-head">
+    <div id="dlgTitle" style="font-weight:600"></div>
+    <button class="btn" onclick="document.getElementById('dlg').close()">✕</button>
+  </div>
+  <div class="dlg-body">
+    <div class="dlg-img"><img id="dlgImg" alt="" style="max-width:100%;height:auto"></div>
+    <div class="kvs" id="dlgMeta"></div>
+  </div>
+</dialog>
+
+<script>
+const els = {
+  set: document.getElementById('set'),
+  size: document.getElementById('size'),
+  cols: document.getElementById('cols'),
+  q: document.getElementById('q'),
+  grid: document.getElementById('grid'),
+  shown: document.getElementById('shown'),
+  dlg: document.getElementById('dlg'),
+  dlgImg: document.getElementById('dlgImg'),
+  dlgTitle: document.getElementById('dlgTitle'),
+  dlgMeta: document.getElementById('dlgMeta'),
+};
+
+let manifest = null;
+let icons = [];
+let limit = 240; // initial render limit for speed
+
+async function loadSet(name){
+  const url = `../${name}/manifest.json`;
+  const r = await fetch(url);
+  if(!r.ok) throw new Error(`Не удалось загрузить ${url}: ${r.status}`);
+  manifest = await r.json();
+  icons = manifest.icons || [];
+  // attach dir for image URL
+  icons.forEach(e=> e._url = `../${name}/${e.file}`);
+  render();
+}
+
+function matches(e, q){
+  if(!q) return true;
+  q = q.toLowerCase().trim();
+  return e.file.toLowerCase().includes(q) || (e.pack||'').toLowerCase().includes(q);
+}
+
+function render(){
+  const size = parseInt(els.size.value,10) || 64;
+  const cols = parseInt(els.cols.value,10) || 8;
+  const q = els.q.value || '';
+  els.grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+  const filtered = icons.filter(e=>matches(e,q));
+  const slice = filtered.slice(0, limit);
+  els.shown.textContent = `${slice.length}${filtered.length>limit ? ` (из ${filtered.length})`: ` / ${filtered.length}`}`;
+
+  // build
+  els.grid.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  for(const e of slice){
+    const card = document.createElement('div');
+    card.className = 'card';
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    thumb.style.height = `auto`;
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.src = e._url;
+    img.alt = e.file;
+    img.width = size;
+    img.height = size;
+    img.style.width = size+'px';
+    img.style.height = size+'px';
+    // Let browser downscale high-res source to `size`. Use auto (Lanczos-like) for smooth, nearest would be pixelated.
+    // For 1:1 we show native 256.
+    img.style.imageRendering = 'auto';
+    img.style.borderRadius = '8px';
+    img.style.boxShadow = '0 1px 10px rgba(0,0,0,.35)';
+    thumb.appendChild(img);
+    const badge = document.createElement('div');
+    badge.className = 'badge';
+    badge.textContent = `${size}px`;
+    thumb.appendChild(badge);
+    thumb.addEventListener('click', ()=> openDlg(e, size));
+    card.appendChild(thumb);
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<div class="name" title="${e.file}">${e.file}</div><div class="small">${e.pack} · ${e.part} #${String(e.index).padStart(3,'0')} · ${e.bytes? (e.bytes/1024).toFixed(1)+' KB':''}</div>`;
+    card.appendChild(meta);
+    frag.appendChild(card);
+  }
+  // footer "load more"
+  if(filtered.length > slice.length){
+    const more = document.createElement('button');
+    more.className = 'btn';
+    more.textContent = `Показать ещё ${Math.min(240, filtered.length - slice.length)} (всего отфильтровано ${filtered.length})`;
+    more.style.margin = '8px auto';
+    more.onclick = ()=>{ limit += 240; render(); };
+    frag.appendChild(more);
+  }
+  els.grid.appendChild(frag);
+}
+
+function openDlg(e, curSize){
+  els.dlgTitle.textContent = e.file;
+  els.dlgImg.src = e._url;
+  els.dlgImg.width = 256;
+  els.dlgImg.height = 256;
+  els.dlgImg.style.width = '256px';
+  els.dlgImg.style.height = '256px';
+  const manRole = manifest.role ? `role: ${manifest.role}` : '';
+  const style = manifest.style ? `style: ${(manifest.style.presets||[]).join('+')}` : '';
+  els.dlgMeta.innerHTML = `
+    <div><b>Путь для Foundry:</b><br><code>modules/rpg-loot-icons/icons/${e.file}</code> <button class="btn" style="padding:2px 6px" onclick="navigator.clipboard.writeText('modules/rpg-loot-icons/icons/${e.file}')">копировать</button></div>
+    <div style="margin-top:8px"><b>Источник:</b> ${e.source||'—'}<br><b>Ячейка:</b> ${e.cell? e.cell.join(', '):'—'} &nbsp; <b>Native:</b> ${e.native? e.native.join('×'):'—'}</div>
+    <div style="margin-top:8px"><b>Набор:</b> ${manifest.size||256}px · ${manifest.format||'webp'}${manifest.lossless?' lossless':''} · ${manRole} · ${style}</div>
+    <div style="margin-top:8px"><b>Сейчас в гриде:</b> ${curSize}px (как в Foundry). Клик вне — закрыть. Изображение выше — 1:1 256px.</div>
+    <div style="margin-top:10px" class="small">Совет: в DND5e поле <code>img</code> предмета — просто вставь путь выше. Для массовки — скрипт по <code>manifest.json</code> (см. docs/FOUNDRY_GUIDE.md).</div>
+  `;
+  els.dlg.showModal();
+}
+
+els.set.addEventListener('change', ()=>{ limit=240; loadSet(els.set.value).catch(e=> alert(e.message)); });
+els.size.addEventListener('change', render);
+els.cols.addEventListener('input', render);
+let t=null;
+els.q.addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(()=>{limit=240; render();}, 250); });
+
+loadSet(els.set.value).catch(e=>{
+  els.grid.innerHTML = `<div style="padding:18px;color:#f99">${e.message}<br>Запусти <code>python3 -m http.server</code> в корне репо и открой <code>/foundry-viewer/</code> через http, не file://.</div>`;
+});
+
+// infinite scroll
+window.addEventListener('scroll', ()=>{
+  if(window.innerHeight + window.scrollY >= document.body.offsetHeight - 800){
+    if(document.querySelector('#grid button')) return;
+    // auto-expand when near bottom if filtered is larger and user scrolled a lot
+  }
+});
+</script>
+</body>
+</html>

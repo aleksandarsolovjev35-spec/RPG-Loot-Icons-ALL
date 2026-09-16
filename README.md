@@ -23,6 +23,8 @@
 (`role`: `actual` / `base` / `candidate` / `previous`), проверка —
 `tools/verify_set.py`, вся последовательность сборки — `docs/PIPELINE.md`.
 
+> **Для Foundry VTT (DND5e)?** Бери `icons-256/` — 256px достаточно для 32–64px в листе/чате/инвентаре (и для ретины 128px), 512 — оверкилл +44 МБ без разницы на 64px. Подробный разбор по разрешению, стилю и массовой генерации — **[docs/FOUNDRY_GUIDE.md](docs/FOUNDRY_GUIDE.md)**. Интерактивный вьювер «как в игре» — **`foundry-viewer/index.html`** (32/48/64/96px, переключение наборов). Сборка модуля Foundry — `tools/build_foundry_module.py --with-packs`.
+
 ## Универсальный алгоритм
 
 0. **Классификация листа.** `has_frame()` считает, сколько строк/столбцов листа

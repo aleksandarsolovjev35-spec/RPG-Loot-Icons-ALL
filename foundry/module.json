@@ -1,0 +1,36 @@
+{
+  "id": "rpg-loot-icons",
+  "title": "RPG Loot Icons — 4100 (DND5e)",
+  "description": "4100 иконок предметов 256×256 WebP (quiet+vign) для DND5e. Чёрный фон, виньетка, единый стиль для грида лута. Источник — 82 листа RPG Loot Icons 01–41. Совместимо с Foundry v11/v12.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "11",
+    "verified": "12"
+  },
+  "authors": [
+    {
+      "name": "RPG Loot Icons"
+    }
+  ],
+  "url": "https://github.com/aleksandarsolovjev35-spec/RPG-Loot-Icons-ALL",
+  "manifest": "https://github.com/aleksandarsolovjev35-spec/RPG-Loot-Icons-ALL/releases/latest/download/module.json",
+  "download": "https://github.com/aleksandarsolovjev35-spec/RPG-Loot-Icons-ALL/releases/latest/download/rpg-loot-icons.zip",
+  "packs": [
+    {
+      "name": "loot-icons",
+      "label": "Loot Icons (4100)",
+      "path": "packs/loot-icons.db",
+      "type": "Item",
+      "system": "dnd5e"
+    }
+  ],
+  "flags": {
+    "rpg-loot-icons": {
+      "sourceSet": "icons-256",
+      "style": "quiet+vign",
+      "size": 256,
+      "format": "webp",
+      "count": 4100
+    }
+  }
+}
