@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Безделушки DND — выбор стиля (Foundry 32–96px)</title>
+<style>
+  :root{--bg:#131318;--card:#1c1c22;--muted:#9aa0a8;--accent:#e6c278;--border:#2a2a33}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell;color:#e8e8ee;background:var(--bg)}
+  header{position:sticky;top:0;z-index:5;background:rgba(19,19,24,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:12px 16px}
+  h1{margin:0;font-size:16px}
+  h1 span{color:var(--accent)}
+  .sub{color:var(--muted);font-size:12px;margin-top:4px;max-width:900px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;align-items:center}
+  .toolbar label{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+  select,button{background:#23232b;border:1px solid var(--border);color:#e8e8ee;border-radius:8px;padding:6px 9px}
+  button{cursor:pointer}
+  button.active{border-color:var(--accent);color:var(--accent)}
+  .pill{display:inline-flex;gap:6px;background:#23232b;border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:12px}
+  .pill b{color:var(--accent)}
+  .grid{padding:16px;display:grid;gap:12px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .thumb{aspect-ratio:1;display:grid;place-items:center;background:radial-gradient(520px 320px at 50% 30%, #1f1f27 0%, #141418 62%, #0e0e12 100%);position:relative}
+  .thumb img{display:block}
+  .meta{padding:8px 9px;border-top:1px solid var(--border);font-size:11px;color:#d8d8de}
+  .meta small{color:var(--muted);font-size:10px}
+  .hint{padding:0 16px 10px;color:var(--muted);font-size:12px}
+  .hint a{color:var(--accent);text-decoration:none}
+  dialog{border:1px solid var(--border);background:#18181e;color:#eee;border-radius:14px;max-width:min(860px,94vw);padding:0}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  .dlg-head{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .dlg-body{padding:14px;display:grid;grid-template-columns:1fr 300px;gap:14px}
+  @media (max-width:760px){.dlg-body{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Безделушки DND — <span>выбор стиля</span> <span style="font-weight:400;color:#9aa0a8">8 предметов × 11 стилей · показ как в Foundry</span></h1>
+  <div class="sub">Смотри как в игре: 32px инвентарь, 48px чат, 64px лист, 96px компендиум. Кнопки внизу листа переключаютSheet 1:1 vs 64px. Источник — твои же <code>tools/stylize.py</code> пресеты, тот же пайплайн что даёт <code>icons-256</code>.</div>
+  <div class="toolbar">
+    <label>Стиль
+      <select id="style">
+        <option value="base">База (без стиля)</option>
+        <option value="quiet_vign" selected>Тихий фон+виньетка (актуальный)</option>
+        <option value="quiet_flat_vign_fit_punch">V2 ровный+fit+punch (макс)</option>
+        <option value="grade">Градация (sочный)</option>
+        <option value="cel">Cel-shading (плоские)</option>
+        <option value="ink">Тушь (контур)</option>
+        <option value="paint">Живопись (фасетки)</option>
+        <option value="warm">Тёплый свет (факел)</option>
+        <option value="cold">Холодный свет (луна)</option>
+        <option value="loot">Loot премиум</option>
+        <option value="pixel">Пиксель-арт 64</option>
+      </select>
+    </label>
+    <label>Размер в Foundry
+      <select id="size">
+        <option value="32">32px инвентарь</option>
+        <option value="48">48px чат</option>
+        <option value="64" selected>64px лист</option>
+        <option value="96">96px компендиум</option>
+        <option value="160">160px превью</option>
+        <option value="256">256px 1:1</option>
+      </select>
+    </label>
+    <button id="toggleSheet">Показать все стили (лист)</button>
+    <span class="pill">Клик по иконке — 1:1 256px</span>
+    <a href="./trinket-stylesheet.png" target="_blank"><button>Открыть лист PNG</button></a>
+    <a href="./README.md" target="_blank"><button>README по стилям</button></a>
+  </div>
+</header>
+<div class="hint">
+  В Foundry путь безделушки — <code>modules/rpg-loot-icons/icons/&lt;pack&gt;/partN/icon_NNN.webp</code> или <code>modules/rpg-loot-icons-trinkets/&lt;name&gt;.webp</code> (если вынесешь безделушки в отдельный пак). Стиль выпекается одной командой: <code>stylize.py --set icons-256-base --apply &lt;стиль&gt; --out-dir icons-256-trinkets</code>.
+</div>
+<div id="grid" class="grid" style="grid-template-columns: repeat(4,1fr)"></div>
+<div id="sheetWrap" style="display:none;padding:16px">
+  <img id="sheetImg" src="./trinket-stylesheet.png" style="max-width:100%;border:1px solid #2a2a33;border-radius:12px">
+  <div style="margin-top:8px">
+    <button onclick="document.getElementById('sheetImg').src='./trinket-stylesheet.png'">Лист 1:1 (160px)</button>
+    <button onclick="document.getElementById('sheetImg').src='./trinket-grid-64.png'">Лист 64px (как в игре)</button>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <div class="dlg-head"><div id="dlgTitle" style="font-weight:600"></div><button onclick="dlg.close()">✕</button></div>
+  <div class="dlg-body"><div style="background:#0f0f13;border:1px solid #2a2a33;border-radius:10px;display:grid;place-items:center;padding:10px"><img id="dlgImg" style="max-width:100%"></div><div id="dlgMeta" style="font-size:12px;line-height:1.5"></div></div>
+</dialog>
+
+<script>
+const trinkets = [
+  {id:"01", name:"Гоблинская лапка с бусиной", file:"trinket_01_goblin_hand", desc:"Мумифицированная лапка, в центре — синяя бусина, жилки"},
+  {id:"02", name:"Хрустальная сфера", file:"trinket_02_crystal_orb", desc:"Прозрачная сфера с галактическим вихрем внутри"},
+  {id:"03", name:"Заводной краб", file:"trinket_03_clockwork_crab", desc:"Латунный краб с ключом на спине, шестерни"},
+  {id:"04", name:"Старая монета", file:"trinket_04_old_coin", desc:"Потёртая монета с профилем забытого короля"},
+  {id:"05", name:"Парящее перо", file:"trinket_05_floating_feather", desc:"Павлинье перо, иридесцент, будто парит"},
+  {id:"06", name:"Латунный шар-лабиринт", file:"trinket_06_brass_maze_orb", desc:"Яйцевидный шар с лабиринтом внутри"},
+  {id:"07", name:"Тряпичная кукла", file:"trinket_07_rag_doll", desc:"Пэчворк, пуговицы-глаза, чуть жуткая"},
+  {id:"08", name:"Музыкальная шкатулка", file:"trinket_08_music_box", desc:"Деревянная резная, крышка приоткрыта, шестерни"},
+];
+const styleMap = {
+  base:            {label:"База", path:p=>`../trinkets-lab/base/${p}.png`},
+  quiet_vign:      {label:"Тихий фон+виньетка", path:p=>`../trinkets-lab/variants/var_quiet_vign_${p.slice(-2) || '00'}_${p}.png`}, // fallback handled below
+  quiet_flat_vign_fit_punch:{label:"V2 ровный", path:p=>`var`},
+  grade:          {label:"Градация"},
+  cel:            {label:"Cel"},
+  ink:            {label:"Тушь"},
+  paint:         {label:"Живопись"},
+  warm:          {label:"Тёплый"},
+  cold:          {label:"Холодный"},
+  loot:          {label:"Loot"},
+  pixel:         {label:"Пиксель"},
+};
+// We need precise mapping: variants are named var_<style>_<idx>_<file>.png where idx is 00..07
+const idxMap = {
+  trinket_01_goblin_hand:"00",
+  trinket_02_crystal_orb:"01",
+  trinket_03_clockwork_crab:"02",
+  trinket_04_old_coin:"03",
+  trinket_05_floating_feather:"04",
+  trinket_06_brass_maze_orb:"05",
+  trinket_07_rag_doll:"06",
+  trinket_08_music_box:"07",
+};
+function variantPath(style, file){
+  if(style==='base') return `../trinkets-lab/base/${file}.png`;
+  const idx = idxMap[file];
+  const prefix = {
+    quiet_vign:"var_quiet_vign",
+    quiet_flat_vign_fit_punch:"var_quiet_flat_vign_fit_punch",
+    grade:"var_grade",
+    cel:"var_cel",
+    ink:"var_ink",
+    paint:"var_paint",
+    warm:"var_warm",
+    cold:"var_cold",
+    loot:"var_loot",
+    pixel:"var_pixel",
+  }[style];
+  return `../trinkets-lab/variants/${prefix}_${idx}_${file}.png`;
+}
+
+const els = {
+  style: document.getElementById('style'),
+  size: document.getElementById('size'),
+  grid: document.getElementById('grid'),
+  sheetWrap: document.getElementById('sheetWrap'),
+  sheetImg: document.getElementById('sheetImg'),
+  toggleSheet: document.getElementById('toggleSheet'),
+  dlg: document.getElementById('dlg'),
+  dlgImg: document.getElementById('dlgImg'),
+  dlgTitle: document.getElementById('dlgTitle'),
+  dlgMeta: document.getElementById('dlgMeta'),
+};
+let sheetMode=false;
+els.toggleSheet.onclick = ()=>{
+  sheetMode = !sheetMode;
+  els.grid.style.display = sheetMode? 'none':'grid';
+  els.sheetWrap.style.display = sheetMode? 'block':'none';
+  els.toggleSheet.textContent = sheetMode? 'Показать сетку (выбранный стиль)':'Показать все стили (лист)';
+  els.toggleSheet.classList.toggle('active', sheetMode);
+};
+
+function render(){
+  const style = els.style.value;
+  const size = parseInt(els.size.value,10);
+  const cols = size>=160?4: size>=96?4:4;
+  els.grid.style.gridTemplateColumns = `repeat(${cols},1fr)`;
+  els.grid.innerHTML='';
+  trinkets.forEach(t=>{
+    const card=document.createElement('div');
+    card.className='card';
+    const thumb=document.createElement('div');
+    thumb.className='thumb';
+    const img=document.createElement('img');
+    img.src = variantPath(style, t.file);
+    img.alt = t.name;
+    img.width = size; img.height=size;
+    img.style.width=size+'px'; img.style.height=size+'px';
+    img.style.imageRendering = size<=64? 'pixelated':'auto';
+    if(size<=96 && style!=='pixel'){
+      // simulate 64px LANCZOS then nearest: browser does auto, close enough. For pixel we keep nearest already.
+    }
+    thumb.appendChild(img);
+    thumb.onclick = ()=> openDlg(t, style);
+    card.appendChild(thumb);
+    const meta=document.createElement('div');
+    meta.className='meta';
+    meta.innerHTML = `${t.name} <small>— ${t.desc}</small><br><small>${style} · ${size}px</small>`;
+    card.appendChild(meta);
+    els.grid.appendChild(card);
+  });
+}
+function openDlg(t, style){
+  els.dlgTitle.textContent = `${t.name} — ${style}`;
+  els.dlgImg.src = variantPath(style, t.file);
+  els.dlgImg.style.width='256px'; els.dlgImg.style.height='256px';
+  els.dlgMeta.innerHTML = `<b>${t.name}</b><br>${t.desc}<br><br>Стиль: <b>${style}</b><br>Файл: <code>${variantPath(style,t.file)}</code><br><br>Безделушки лучше хранить 256×256 WebP как <code>modules/rpg-loot-icons-trinkets/${t.file}.webp</code>. В DND5e Item.img — просто путь.<br><br><small>Совет: сравни этот же предмет на <code>64px</code> vs <code>256px</code> — безделушки должны читаться на 64.</small>`;
+  els.dlg.showModal();
+}
+els.style.addEventListener('change', render);
+els.size.addEventListener('change', render);
+render();
+</script>
+</body>
+</html>
