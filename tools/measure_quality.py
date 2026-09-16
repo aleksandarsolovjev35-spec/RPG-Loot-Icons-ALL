@@ -167,8 +167,14 @@ def main(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--sheets', type=int, default=7, help='how many sample icons (default 7)')
     ap.add_argument('--set', default=None, help='also measure this set dir, e.g. icons-512')
+    ap.add_argument('--size', type=int, default=512,
+                    help='output side to measure (default 512; use 256 for the 256 sets)')
     ap.add_argument('--jobs', type=int, default=0, help='0 = cpu count')
     args = ap.parse_args(argv)
+    global S
+    if args.size < 16:
+        ap.error('--size must be at least 16')
+    S = args.size
 
     samples = sample_icons(args.sheets)
     rows = {label: [] for label, _ in STAGES}
@@ -184,7 +190,8 @@ def main(argv=None):
         ref64 = np.asarray(Image.fromarray(crop).resize((64, 64), Image.LANCZOS), np.float32)
         ref = (m, np.abs((Lr - I.box(Lr, 2))[m[1]]).mean(), ref64)
         for label, cfg in STAGES:
-            rows[label].append(measure(I.enhance(crop, cfg), crop, ref))
+            stage_cfg = dict(cfg, size=S)
+            rows[label].append(measure(I.enhance(crop, stage_cfg), crop, ref))
         if args.set:
             f = set_file(args.set, path, k)
             if f:
